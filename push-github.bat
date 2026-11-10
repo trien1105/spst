@@ -36,3 +36,4 @@ if %errorlevel% equ 0 (
     echo [LUU Y] Neu gap loi xac thuc hoac quyen truy cap, hay dam bao ban da dang nhap GitHub tren may.
 )
 pause
+

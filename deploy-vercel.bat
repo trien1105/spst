@@ -18,3 +18,4 @@ call npx vercel --prod
 echo.
 echo Hoan tat! Hay kiem tra trang web tren trinh duyet.
 pause
+
