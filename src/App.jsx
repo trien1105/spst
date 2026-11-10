@@ -2163,12 +2163,58 @@ export default function App() {
     }
   });
 
-  // 3. Kiểm tra máy chủ có phải localhost hay không (Chỉ Localhost mới có quyền Host tạo phòng & QR Code)
+  // 3. Kiểm tra máy chủ có phải localhost hay không (Chỉ Localhost hoặc ?host=1 mới có quyền Host)
   const isHostMachine = useMemo(() => {
     if (typeof window === 'undefined') return false;
     const h = window.location.hostname;
-    return h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || h === '0.0.0.0';
+    const isLocal = h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || h === '0.0.0.0';
+    try {
+      const p = new URLSearchParams(window.location.search);
+      return isLocal || p.get('host') === '1';
+    } catch {
+      return isLocal;
+    }
   }, []);
+
+  // 3.1. Cấu hình Backend Server URL (Chạy trên PC của bạn, phục vụ cho giao diện Vercel)
+  const [backendUrl, setBackendUrl] = useState(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const queryApi = params.get('api') || params.get('server') || params.get('backend');
+      if (queryApi) {
+        const clean = queryApi.trim().replace(/\/+$/, '');
+        localStorage.setItem('vnr202_backend_url', clean);
+        return clean;
+      }
+      const saved = localStorage.getItem('vnr202_backend_url');
+      if (saved) return saved;
+
+      const h = window.location.hostname;
+      if (h === 'localhost' || h === '127.0.0.1') {
+        return 'http://localhost:4000';
+      }
+    } catch {}
+    return '';
+  });
+
+  // 3.2. Tên miền Giao diện Frontend (https://conduongdoclap.vercel.app)
+  const [frontendDomain, setFrontendDomain] = useState(() => {
+    try {
+      const h = window.location.hostname;
+      if (h !== 'localhost' && h !== '127.0.0.1') {
+        return window.location.origin;
+      }
+    } catch {}
+    return 'https://conduongdoclap.vercel.app';
+  });
+
+  // Helper an toàn tạo URL gọi API
+  const getApiUrl = useCallback((endpoint) => {
+    const ep = endpoint.startsWith('/') ? endpoint : '/' + endpoint;
+    if (!backendUrl) return ep;
+    const base = backendUrl.trim().replace(/\/+$/, '');
+    return `${base}${ep}`;
+  }, [backendUrl]);
 
   // 4. Mã phòng thi đấu (tự động nhận từ ?room=XYZ hoặc mặc định VNR202)
   const [roomCode, setRoomCode] = useState(() => {
@@ -2562,35 +2608,51 @@ export default function App() {
     setCraftSuccessModal(recipe);
   };
 
-  // Lấy thông tin LAN IP cho Host khi khởi động (chỉ chạy trên localhost)
-  useEffect(() => {
-    if (isHostMachine) {
-      fetch('/api/race/info')
-        .then((r) => r.json())
-        .then((data) => {
-          setLanInfo(data);
-          const fullUrl = `${data.baseUrl || ('http://' + data.ip + ':5173')}/?room=${roomCode}`;
-          QRCode.toDataURL(fullUrl, {
-            width: 280,
-            margin: 2,
-            color: { dark: '#0b1612', light: '#ffffff' }
-          }).then((url) => setQrCodeDataUrl(url)).catch(() => {});
-        })
-        .catch(() => {});
-    }
-  }, [isHostMachine, roomCode]);
+  // Sinh QR Code cho phòng chỉ định (mặc định mở https://conduongdoclap.vercel.app)
+  const generateQrForRoom = useCallback((targetCode, customApi, customFe) => {
+    const code = (targetCode || roomCode || 'VNR202').trim().toUpperCase();
+    const fe = (customFe || frontendDomain || 'https://conduongdoclap.vercel.app').trim().replace(/\/+$/, '');
+    const api = customApi !== undefined ? customApi : backendUrl;
 
-  // Sinh QR Code cho phòng chỉ định
-  const generateQrForRoom = (targetCode) => {
-    const ip = lanInfo?.ip || window.location.hostname;
-    const port = lanInfo?.port || window.location.port || '5173';
-    const fullUrl = `http://${ip}:${port}/?room=${targetCode}`;
+    let fullUrl = `${fe}/?room=${encodeURIComponent(code)}`;
+    if (api && api.trim()) {
+      fullUrl += `&api=${encodeURIComponent(api.trim().replace(/\/+$/, ''))}`;
+    }
+
     QRCode.toDataURL(fullUrl, {
       width: 280,
       margin: 2,
       color: { dark: '#0b1612', light: '#ffffff' }
     }).then((url) => setQrCodeDataUrl(url)).catch(() => {});
-  };
+
+    return fullUrl;
+  }, [roomCode, frontendDomain, backendUrl]);
+
+  // Lấy thông tin LAN IP cho Host khi khởi động
+  useEffect(() => {
+    if (isHostMachine) {
+      const primaryUrl = getApiUrl('/api/race/info');
+      fetch(primaryUrl)
+        .then((r) => r.json())
+        .then((data) => {
+          setLanInfo(data);
+          generateQrForRoom(roomCode, backendUrl || data.baseUrl);
+        })
+        .catch(() => {
+          fetch('/api/race/info')
+            .then((r) => r.json())
+            .then((data) => {
+              setLanInfo(data);
+              generateQrForRoom(roomCode, data.baseUrl);
+            })
+            .catch(() => {
+              generateQrForRoom(roomCode, backendUrl);
+            });
+        });
+    } else {
+      generateQrForRoom(roomCode, backendUrl);
+    }
+  }, [isHostMachine, roomCode, backendUrl, frontendDomain, getApiUrl, generateQrForRoom]);
 
   // Đồng bộ nhịp tim (Heartbeat sync) người chơi lên phòng đua định kỳ 1.8s
   useEffect(() => {
@@ -2760,9 +2822,7 @@ export default function App() {
 
   // Sao chép link tham gia
   const handleCopyJoinLink = () => {
-    const ip = lanInfo?.ip || window.location.hostname;
-    const port = lanInfo?.port || window.location.port || '5173';
-    const fullUrl = `http://${ip}:${port}/?room=${roomCode}`;
+    const fullUrl = generateQrForRoom(roomCode, backendUrl, frontendDomain);
     navigator.clipboard?.writeText(fullUrl);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
@@ -4968,17 +5028,59 @@ export default function App() {
                   </div>
                 )}
 
+                {/* Link tham gia kết hợp Frontend Vercel (conduongdoclap.vercel.app) & Backend PC Host */}
                 <div className="w-full bg-[#14261f] border border-[#2b483c] rounded-xl p-2 text-xs flex items-center justify-between gap-1 mb-2">
-                  <span className="font-mono text-amber-200 truncate select-all text-[11px]">
-                    http://{lanInfo?.ip || '192.168.x.x'}:5173/?room={roomCode}
+                  <span className="font-mono text-amber-200 truncate select-all text-[11px]" title={generateQrForRoom(roomCode, backendUrl, frontendDomain)}>
+                    {generateQrForRoom(roomCode, backendUrl, frontendDomain)}
                   </span>
                   <button
                     onClick={handleCopyJoinLink}
-                    className="shrink-0 p-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-400/40 rounded transition"
-                    title="Sao chép đường link này"
+                    className="shrink-0 p-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-400/40 rounded-lg transition flex items-center gap-1 font-bold text-[10px]"
+                    title="Sao chép link mời người chơi"
                   >
                     {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedLink ? 'Đã chép' : 'Chép link'}</span>
                   </button>
+                </div>
+
+                {/* Khung cấu hình kết nối Vercel Frontend + Local Backend */}
+                <div className="w-full bg-[#0a1410] border border-[#1e342a] rounded-xl p-2.5 mb-2.5 text-left space-y-2">
+                  <div>
+                    <label className="text-[10px] font-bold text-amber-300 block mb-0.5">
+                      🌐 Giao diện Web (Frontend Vercel):
+                    </label>
+                    <input
+                      type="text"
+                      value={frontendDomain}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFrontendDomain(val);
+                        generateQrForRoom(roomCode, backendUrl, val);
+                      }}
+                      placeholder="https://conduongdoclap.vercel.app"
+                      className="w-full bg-[#12221b] border border-[#254235] text-[11px] text-stone-200 px-2 py-1 rounded font-mono focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-emerald-300 block mb-0.5">
+                      ⚡ Máy chủ Backend (Chạy tại PC của bạn):
+                    </label>
+                    <input
+                      type="text"
+                      value={backendUrl}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setBackendUrl(val);
+                        localStorage.setItem('vnr202_backend_url', val);
+                        generateQrForRoom(roomCode, val, frontendDomain);
+                      }}
+                      placeholder="http://localhost:4000 hoặc link HTTPS Tunnel..."
+                      className="w-full bg-[#12221b] border border-[#254235] text-[11px] text-stone-200 px-2 py-1 rounded font-mono focus:outline-none focus:border-emerald-400"
+                    />
+                    <p className="text-[9px] text-stone-400 mt-0.5">
+                      Mẹo: Chạy <code>run-backend-tunnel.bat</code> để lấy link HTTPS miễn phí cho Vercel.
+                    </p>
+                  </div>
                 </div>
 
                 {/* Form đổi/tạo mã phòng mới */}
@@ -5403,9 +5505,22 @@ export default function App() {
               ))}
             </div>
 
+            {/* Trạng thái kết nối Máy chủ */}
+            <div className="mt-3 p-2 bg-[#0d1814] rounded-xl border border-[#20362c] text-left">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="font-bold text-amber-300">Máy chủ Backend (Host PC):</span>
+                <span className="font-mono text-emerald-400 truncate max-w-[200px]" title={backendUrl || 'Chạy nội bộ'}>
+                  {backendUrl || 'Mặc định (Local)'}
+                </span>
+              </div>
+              <p className="text-[10px] text-stone-400 mt-0.5">
+                ✦ Giao diện tải từ Vercel, dữ liệu thi đấu đồng bộ trực tiếp về máy chủ của Host.
+              </p>
+            </div>
+
             <button
               onClick={() => setShowJoinModal(false)}
-              className="mt-4 w-full bg-amber-500 hover:bg-amber-400 text-stone-950 font-black py-2 rounded-xl text-xs uppercase"
+              className="mt-3 w-full bg-amber-500 hover:bg-amber-400 text-stone-950 font-black py-2 rounded-xl text-xs uppercase"
             >
               Đóng
             </button>

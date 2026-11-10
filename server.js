@@ -75,7 +75,7 @@ function serializeRoom(room) {
 }
 
 const server = http.createServer(async (req, res) => {
-  // CORS Headers cho phép Vercel (https://truytimdoclap.vercel.app) gọi API mượt mà
+  // CORS Headers cho phép Vercel (https://conduongdoclap.vercel.app) gọi API mượt mà
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
@@ -278,7 +278,8 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`- Localhost:    http://localhost:${PORT}`);
   console.log(`- LAN (Wi-Fi):  http://${lanIp}:${PORT}`);
   console.log('----------------------------------------------------------------');
-  console.log('Frontend trên Vercel (truytimdoclap.vercel.app) có thể kết nối');
+  console.log('Frontend trên Vercel (conduongdoclap.vercel.app) có thể kết nối');
   console.log(`vào backend này trực tiếp hoặc qua đường hầm (Tunnel).`);
   console.log('================================================================\n');
 });
+
