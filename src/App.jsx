@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import QRCode from 'qrcode';
 import {
   Compass,
@@ -2608,7 +2608,7 @@ export default function App() {
           finishTimeMs: finishTimeMsRecord
         };
 
-        const res = await fetch('/api/race/sync', {
+        const res = await fetch(getApiUrl('/api/race/sync'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -2664,7 +2664,7 @@ export default function App() {
 
     const fetchHostRoom = async () => {
       try {
-        const res = await fetch(`/api/race/room?code=${roomCode}`);
+        const res = await fetch(getApiUrl(`/api/race/room?code=${roomCode}`));
         if (res.ok) {
           const data = await res.json();
           if (data.success && data.room) {
@@ -2686,7 +2686,7 @@ export default function App() {
       setRaceCountdown('3... 2... 1... BẮT ĐẦU! 🚀');
       setTimeout(() => setRaceCountdown(null), 3000);
 
-      const res = await fetch('/api/race/action', {
+      const res = await fetch(getApiUrl('/api/race/action'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomCode, action: 'START' })
@@ -2703,7 +2703,7 @@ export default function App() {
   // Host làm mới / Reset cuộc đua
   const handleHostResetRace = async () => {
     try {
-      const res = await fetch('/api/race/action', {
+      const res = await fetch(getApiUrl('/api/race/action'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomCode, action: 'RESET' })
@@ -2722,7 +2722,7 @@ export default function App() {
   // Host kết thúc cuộc đua
   const handleHostEndRace = async () => {
     try {
-      const res = await fetch('/api/race/action', {
+      const res = await fetch(getApiUrl('/api/race/action'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomCode, action: 'END' })
@@ -2741,7 +2741,7 @@ export default function App() {
     const code = (newCode || 'VNR202').trim().toUpperCase();
     if (!code) return;
     try {
-      const res = await fetch('/api/race/create', {
+      const res = await fetch(getApiUrl('/api/race/create'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomCode: code, maxPlayers: 60 })
@@ -2790,7 +2790,7 @@ export default function App() {
       setGameStatus('WON');
 
       // Gửi ngay kết quả về đích lên server
-      fetch('/api/race/sync', {
+      fetch(getApiUrl('/api/race/sync'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

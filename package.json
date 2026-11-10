@@ -6,6 +6,7 @@
   "scripts": {
     "generate-assets": "node generate-assets.js",
     "dev": "vite",
+    "server": "node server.js",
     "build": "node generate-assets.js && vite build",
     "preview": "vite preview"
   },
