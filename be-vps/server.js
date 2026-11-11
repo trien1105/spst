@@ -124,7 +124,7 @@ function getSerializedRoom(room, forceRefresh = false) {
 
   allPlayers.sort((a, b) => {
     if (a.isFinished && b.isFinished) {
-      return (a.finishTimeMs || 0) - (b.finishTimeMs || 0);
+      return (a.finishTimeMs || Number.MAX_SAFE_INTEGER) - (b.finishTimeMs || Number.MAX_SAFE_INTEGER);
     }
     if (a.isFinished && !b.isFinished) return -1;
     if (!a.isFinished && b.isFinished) return 1;
@@ -133,7 +133,7 @@ function getSerializedRoom(room, forceRefresh = false) {
     const mapB = MAP_ORDER[b.currentMapId] || 0;
     if (mapA !== mapB) return mapB - mapA;
     if (a.solvedCount !== b.solvedCount) return b.solvedCount - a.solvedCount;
-    return b.lastSeen - a.lastSeen;
+    return (a.lastProgressAt || a.joinedAt || 0) - (b.lastProgressAt || b.joinedAt || 0);
   });
 
   const rankMap = new Map();
@@ -249,8 +249,9 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (body.action === 'START') {
+      const nowMs = Date.now();
       room.status = 'RACING';
-      room.startTime = Date.now();
+      room.startTime = nowMs;
       room.endTime = null;
       for (const p of room.players.values()) {
         p.isFinished = false;
@@ -258,9 +259,12 @@ const server = http.createServer(async (req, res) => {
         p.solvedCount = 0;
         p.currentMapId = 'MAP_QUANGTRUONG';
         p.currentMapName = 'Quảng Trường Ánh Sáng';
+        p.joinedAt = nowMs;
+        p.lastProgressAt = nowMs;
       }
       console.log(`[RACE STARTED] Phòng ${code} đã bắt đầu mới lúc ${new Date().toLocaleTimeString()}!`);
     } else if (body.action === 'RESET') {
+      const nowMs = Date.now();
       room.status = 'WAITING';
       room.startTime = null;
       room.endTime = null;
@@ -270,6 +274,8 @@ const server = http.createServer(async (req, res) => {
         p.solvedCount = 0;
         p.currentMapId = 'MAP_QUANGTRUONG';
         p.currentMapName = 'Quảng Trường Ánh Sáng';
+        p.joinedAt = nowMs;
+        p.lastProgressAt = nowMs;
       }
       console.log(`[RACE RESET] Phòng ${code} đã được Host làm mới!`);
     } else if (body.action === 'END') {
@@ -315,6 +321,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    const nowMs = Date.now();
     const existing = room.players.get(pid);
 
     // Nếu phòng đang RACING với startTime mới mà client chưa kịp reset (clientStartTime !== room.startTime),
@@ -324,9 +331,23 @@ const server = http.createServer(async (req, res) => {
       room.startTime &&
       body.clientStartTime !== room.startTime;
 
+    const joinedAt = isClientStaleForNewRace
+      ? (room.startTime || nowMs)
+      : (existing?.joinedAt || room.startTime || nowMs);
+
+    const nextIsFinished = isClientStaleForNewRace ? false : !!(body.isFinished || existing?.isFinished);
+
+    // Khóa chặt finishTimeMs ngay thời điểm người chơi về đích lần đầu tiên trong ván
     let finishTimeMs = isClientStaleForNewRace ? null : (existing?.finishTimeMs || null);
-    if (!isClientStaleForNewRace && body.isFinished && !finishTimeMs) {
-      finishTimeMs = room.startTime ? Math.max(1000, Date.now() - room.startTime) : (body.finishTimeMs || 1000);
+    if (nextIsFinished && (!finishTimeMs || finishTimeMs <= 0)) {
+      if (room.startTime) {
+        const refEnd = room.endTime ? Math.min(nowMs, room.endTime) : nowMs;
+        finishTimeMs = Math.max(1000, refEnd - room.startTime);
+      } else if (typeof body.finishTimeMs === 'number' && body.finishTimeMs >= 1000) {
+        finishTimeMs = Math.round(body.finishTimeMs);
+      } else {
+        finishTimeMs = Math.max(1000, nowMs - joinedAt);
+      }
       room._dirty = true;
     }
 
@@ -339,16 +360,15 @@ const server = http.createServer(async (req, res) => {
     const nextMapName = isClientStaleForNewRace
       ? 'Quảng Trường Ánh Sáng'
       : (body.currentMapName || 'Quảng Trường Ánh Sáng');
-    const nextIsFinished = isClientStaleForNewRace ? false : !!body.isFinished;
     const nextName = (body.playerName || 'Hò Văn Tèn').trim().slice(0, 30);
 
-    if (
+    const hasProgressChanged =
       !existing ||
       existing.solvedCount !== nextSolved ||
       existing.currentMapId !== nextMapId ||
-      existing.name !== nextName ||
-      existing.isFinished !== nextIsFinished
-    ) {
+      existing.isFinished !== nextIsFinished;
+
+    if (hasProgressChanged || existing.name !== nextName) {
       room._dirty = true;
     }
 
@@ -361,7 +381,9 @@ const server = http.createServer(async (req, res) => {
       totalPieces: typeof body.totalPieces === 'number' ? body.totalPieces : 8,
       isFinished: nextIsFinished,
       finishTimeMs,
-      lastSeen: Date.now()
+      joinedAt,
+      lastProgressAt: hasProgressChanged ? nowMs : (existing?.lastProgressAt || joinedAt),
+      lastSeen: nowMs
     });
 
     const sRoom = getSerializedRoom(room);
@@ -373,7 +395,8 @@ const server = http.createServer(async (req, res) => {
       startTime: room.startTime,
       endTime: room.endTime,
       rank: myRank,
-      totalPlayers: sRoom.playerCount
+      totalPlayers: sRoom.playerCount,
+      finishTimeMs
     }));
     return;
   }

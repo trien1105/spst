@@ -2357,10 +2357,12 @@ export default function App() {
   const raceStartSeenRef = useRef(false);
   // Lưu dấu mốc startTime của ván đua hiện tại để phân biệt reconnect cùng ván vs Admin bấm Bắt Đầu ván mới
   const syncedStartTimeRef = useRef(initialSaved?.syncedStartTime || null);
+  const playSessionStartRef = useRef(Date.now());
 
   // Hàm ép toàn bộ tiến trình người chơi quay về điểm xuất phát (khi Admin bấm Bắt Đầu hoặc Đặt Lại)
   const resetPlayerForNewRaceSession = useCallback((newStartTime) => {
     syncedStartTimeRef.current = newStartTime || null;
+    playSessionStartRef.current = newStartTime || Date.now();
     const startSpawn = { ...MAP_DEFINITIONS.MAP_QUANGTRUONG.spawn };
     setCurrentMapId('MAP_QUANGTRUONG');
     posRef.current = startSpawn;
@@ -3004,6 +3006,10 @@ export default function App() {
             setMyRankInRoom((prev) => (prev !== (data.rank || 1) ? (data.rank || 1) : prev));
             setTotalPlayersInRoom((prev) => (prev !== (data.totalPlayers || 1) ? (data.totalPlayers || 1) : prev));
 
+            if (typeof data.finishTimeMs === 'number' && data.finishTimeMs >= 1000) {
+              setFinishTimeMsRecord((prev) => (prev !== data.finishTimeMs ? data.finishTimeMs : prev));
+            }
+
             if (data.roomStatus === 'RACING' && data.startTime) {
               const diffSec = Math.floor((Date.now() - data.startTime) / 1000);
               setRaceElapsedSeconds(Math.max(0, diffSec));
@@ -3016,6 +3022,8 @@ export default function App() {
                 setRaceCountdown('BẮT ĐẦU PHẦN THI!');
                 setTimeout(() => setRaceCountdown(null), 2500);
               }
+            } else if (data.roomStatus === 'FINISHED' && data.startTime && data.endTime) {
+              setRaceElapsedSeconds(Math.max(0, Math.floor((data.endTime - data.startTime) / 1000)));
             } else if (data.roomStatus === 'WAITING') {
               setRaceElapsedSeconds(0);
               // Nếu trước đó đang trong một ván đua mà Admin bấm Đặt lại (RESET về WAITING) -> Reset người chơi về đầu
@@ -3046,16 +3054,22 @@ export default function App() {
     };
   }, [backendUrl, getApiUrl, retryTrigger, roomCode]);
 
-  // Bộ đếm thời gian thi đấu tăng mỗi giây khi trạng thái RACING
+  // Bộ đếm thời gian thi đấu tăng mỗi giây khi trạng thái RACING và dừng lại khi FINISHED
   useEffect(() => {
     let timer;
     if (raceRoomData?.status === 'RACING' && raceRoomData?.startTime) {
-      timer = setInterval(() => {
+      const updateSec = () => {
         setRaceElapsedSeconds(Math.max(0, Math.floor((Date.now() - raceRoomData.startTime) / 1000)));
-      }, 1000);
+      };
+      updateSec();
+      timer = setInterval(updateSec, 1000);
+    } else if (raceRoomData?.status === 'FINISHED' && raceRoomData?.startTime && raceRoomData?.endTime) {
+      setRaceElapsedSeconds(Math.max(0, Math.floor((raceRoomData.endTime - raceRoomData.startTime) / 1000)));
+    } else if (raceRoomData?.status === 'WAITING') {
+      setRaceElapsedSeconds(0);
     }
     return () => clearInterval(timer);
-  }, [raceRoomData?.status, raceRoomData?.startTime]);
+  }, [raceRoomData?.status, raceRoomData?.startTime, raceRoomData?.endTime]);
 
   // Host & Người chơi tải Leaderboard 60 người không chồng chéo (Non-overlapping poll qua POST text/plain)
   useEffect(() => {
@@ -3188,10 +3202,21 @@ export default function App() {
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  // Format thời gian mm:ss
-  const formatRaceTime = (secondsOrMs) => {
-    if (!secondsOrMs && secondsOrMs !== 0) return '--:--';
-    const totalSec = secondsOrMs > 100000 ? Math.floor(secondsOrMs / 1000) : Math.floor(secondsOrMs);
+  // Format thời gian đồng hồ đếm giây chung (đầu vào: giây -> mm:ss)
+  const formatRaceTime = (seconds) => {
+    if (seconds === null || seconds === undefined || Number.isNaN(Number(seconds))) return '--:--';
+    const val = Number(seconds);
+    const totalSec = val > 36000 ? Math.floor(val / 1000) : Math.max(0, Math.floor(val));
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  // Format thời gian về đích đã chốt của từng Top (đầu vào: mili-giây finishTimeMs -> mm:ss)
+  const formatFinishTimeMs = (ms) => {
+    if (ms === null || ms === undefined || Number.isNaN(Number(ms)) || Number(ms) <= 0) return '--:--';
+    const num = Number(ms);
+    const totalSec = num >= 500 ? Math.max(1, Math.round(num / 1000)) : Math.max(1, Math.round(num));
     const m = Math.floor(totalSec / 60);
     const s = totalSec % 60;
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
@@ -3205,7 +3230,11 @@ export default function App() {
     if (hasTuyenNgon && hasLaCo) {
       SoundEngine.victory();
       const now = Date.now();
-      const finishMs = raceRoomData?.startTime ? Math.max(1000, now - raceRoomData.startTime) : (raceElapsedSeconds * 1000 || 180000);
+      const baseStart = syncedStartTimeRef.current || raceRoomData?.startTime || playSessionStartRef.current || (now - 1000);
+      const finishMs =
+        finishTimeMsRecord && finishTimeMsRecord >= 1000
+          ? finishTimeMsRecord
+          : Math.max(1000, now - baseStart);
       setFinishTimeMsRecord(finishMs);
       setGameStatus('WON');
 
@@ -3225,7 +3254,14 @@ export default function App() {
           finishTimeMs: finishMs,
           clientStartTime: syncedStartTimeRef.current
         })
-      }).catch(() => {});
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data && typeof data.finishTimeMs === 'number' && data.finishTimeMs >= 1000) {
+            setFinishTimeMsRecord(data.finishTimeMs);
+          }
+        })
+        .catch(() => {});
     } else {
       SoundEngine.wrong();
       setPodiumWarningModal({
@@ -4373,7 +4409,7 @@ export default function App() {
 
               <div className="hidden sm:flex items-center space-x-1 text-emerald-400 font-mono text-xs font-bold">
                 <Timer className="w-3.5 h-3.5 text-emerald-400" />
-                <span>{formatRaceTime(raceElapsedSeconds)}</span>
+                <span>{gameStatus === 'WON' && finishTimeMsRecord ? formatFinishTimeMs(finishTimeMsRecord) : formatRaceTime(raceElapsedSeconds)}</span>
               </div>
 
               <button
@@ -5151,7 +5187,7 @@ export default function App() {
               <div>
                 <div className="text-[11px] text-amber-300 font-extrabold uppercase tracking-wider">THỜI GIAN VỀ ĐÍCH</div>
                 <div className="text-3xl font-black text-emerald-400 font-mono mt-0.5">
-                  {formatRaceTime(finishTimeMsRecord || raceElapsedSeconds)}
+                  {finishTimeMsRecord ? formatFinishTimeMs(finishTimeMsRecord) : formatRaceTime(raceElapsedSeconds)}
                 </div>
               </div>
             </div>
@@ -5771,7 +5807,11 @@ export default function App() {
                                   </div>
                                 </td>
                                 <td className="py-3 px-4 text-right font-mono text-neutral-200">
-                                  {formatRaceTime(p.finishTimeMs || (p.isFinished ? null : raceElapsedSeconds))}
+                                  {p.isFinished
+                                    ? formatFinishTimeMs(p.finishTimeMs)
+                                    : raceRoomData?.status === 'FINISHED'
+                                    ? '--:--'
+                                    : formatRaceTime(raceElapsedSeconds)}
                                 </td>
                                 <td className="py-3 px-4 text-right">
                                   {p.isFinished ? (
@@ -5861,7 +5901,9 @@ export default function App() {
                 {raceRoomData?.leaderboard?.[1]?.name || '---'}
               </div>
               <div className="text-xs font-mono font-bold text-emerald-400 mt-0.5">
-                {formatRaceTime(raceRoomData?.leaderboard?.[1]?.finishTimeMs)}
+                {raceRoomData?.leaderboard?.[1]?.isFinished
+                  ? formatFinishTimeMs(raceRoomData?.leaderboard?.[1]?.finishTimeMs)
+                  : '--:--'}
               </div>
             </div>
 
@@ -5873,7 +5915,9 @@ export default function App() {
                 {raceRoomData?.leaderboard?.[0]?.name || '---'}
               </div>
               <div className="text-sm font-mono font-black text-emerald-400 mt-0.5">
-                {formatRaceTime(raceRoomData?.leaderboard?.[0]?.finishTimeMs)}
+                {raceRoomData?.leaderboard?.[0]?.isFinished
+                  ? formatFinishTimeMs(raceRoomData?.leaderboard?.[0]?.finishTimeMs)
+                  : '--:--'}
               </div>
             </div>
 
@@ -5885,7 +5929,9 @@ export default function App() {
                 {raceRoomData?.leaderboard?.[2]?.name || '---'}
               </div>
               <div className="text-xs font-mono font-bold text-emerald-400 mt-0.5">
-                {formatRaceTime(raceRoomData?.leaderboard?.[2]?.finishTimeMs)}
+                {raceRoomData?.leaderboard?.[2]?.isFinished
+                  ? formatFinishTimeMs(raceRoomData?.leaderboard?.[2]?.finishTimeMs)
+                  : '--:--'}
               </div>
             </div>
           </div>
@@ -5913,7 +5959,11 @@ export default function App() {
                     <div className="flex items-center space-x-3 shrink-0">
                       <span className="font-mono text-stone-300 text-[11px]">{p.solvedCount}/8</span>
                       <span className="font-mono font-bold text-emerald-400">
-                        {formatRaceTime(p.finishTimeMs || (p.isFinished ? null : raceElapsedSeconds))}
+                        {p.isFinished
+                          ? formatFinishTimeMs(p.finishTimeMs)
+                          : raceRoomData?.status === 'FINISHED'
+                          ? '--:--'
+                          : formatRaceTime(raceElapsedSeconds)}
                       </span>
                       {p.isFinished && (
                         <span className="text-[10px] bg-amber-500 text-stone-950 px-1.5 py-0.5 rounded font-black">
@@ -5947,7 +5997,11 @@ export default function App() {
                     <div className="flex items-center space-x-3 shrink-0">
                       <span className="font-mono text-stone-300 text-[11px]">{p.solvedCount}/8</span>
                       <span className="font-mono font-bold text-emerald-400">
-                        {formatRaceTime(p.finishTimeMs || (p.isFinished ? null : raceElapsedSeconds))}
+                        {p.isFinished
+                          ? formatFinishTimeMs(p.finishTimeMs)
+                          : raceRoomData?.status === 'FINISHED'
+                          ? '--:--'
+                          : formatRaceTime(raceElapsedSeconds)}
                       </span>
                       {p.isFinished && (
                         <span className="text-[10px] bg-amber-500 text-stone-950 px-1.5 py-0.5 rounded font-black">
@@ -5995,7 +6049,7 @@ export default function App() {
               <div>
                 <span className="text-stone-400">Thời gian</span>
                 <div className="text-xl font-black text-emerald-400 font-mono">
-                  {formatRaceTime(raceElapsedSeconds)}
+                  {gameStatus === 'WON' && finishTimeMsRecord ? formatFinishTimeMs(finishTimeMsRecord) : formatRaceTime(raceElapsedSeconds)}
                 </div>
               </div>
             </div>
@@ -6019,7 +6073,11 @@ export default function App() {
                   <div className="flex items-center space-x-2">
                     <span className="font-mono text-stone-400">{p.solvedCount}/8</span>
                     <span className="font-mono text-emerald-400 font-bold">
-                      {formatRaceTime(p.finishTimeMs || (p.isFinished ? null : raceElapsedSeconds))}
+                      {p.isFinished
+                        ? formatFinishTimeMs(p.finishTimeMs)
+                        : raceRoomData?.status === 'FINISHED'
+                        ? '--:--'
+                        : formatRaceTime(raceElapsedSeconds)}
                     </span>
                     {p.isFinished && <span>🏆</span>}
                   </div>

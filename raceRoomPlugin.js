@@ -48,7 +48,7 @@ function getSerializedRoom(room, forceRefresh = false) {
 
   allPlayers.sort((a, b) => {
     if (a.isFinished && b.isFinished) {
-      return (a.finishTimeMs || 0) - (b.finishTimeMs || 0);
+      return (a.finishTimeMs || Number.MAX_SAFE_INTEGER) - (b.finishTimeMs || Number.MAX_SAFE_INTEGER);
     }
     if (a.isFinished && !b.isFinished) return -1;
     if (!a.isFinished && b.isFinished) return 1;
@@ -57,7 +57,7 @@ function getSerializedRoom(room, forceRefresh = false) {
     const mapB = MAP_ORDER[b.currentMapId] || 0;
     if (mapA !== mapB) return mapB - mapA;
     if (a.solvedCount !== b.solvedCount) return b.solvedCount - a.solvedCount;
-    return b.lastSeen - a.lastSeen;
+    return (a.lastProgressAt || a.joinedAt || 0) - (b.lastProgressAt || b.joinedAt || 0);
   });
 
   const rankMap = new Map();
@@ -247,6 +247,7 @@ export function raceRoomPlugin() {
             return;
           }
 
+          const nowMs = Date.now();
           const existing = room.players.get(pid);
 
           const isClientStaleForNewRace =
@@ -254,9 +255,22 @@ export function raceRoomPlugin() {
             room.startTime &&
             body.clientStartTime !== room.startTime;
 
+          const joinedAt = isClientStaleForNewRace
+            ? (room.startTime || nowMs)
+            : (existing?.joinedAt || room.startTime || nowMs);
+
+          const nextIsFinished = isClientStaleForNewRace ? false : !!(body.isFinished || existing?.isFinished);
+
           let finishTimeMs = isClientStaleForNewRace ? null : (existing?.finishTimeMs || null);
-          if (!isClientStaleForNewRace && body.isFinished && !finishTimeMs) {
-            finishTimeMs = room.startTime ? Math.max(1000, Date.now() - room.startTime) : (body.finishTimeMs || 1000);
+          if (nextIsFinished && (!finishTimeMs || finishTimeMs <= 0)) {
+            if (room.startTime) {
+              const refEnd = room.endTime ? Math.min(nowMs, room.endTime) : nowMs;
+              finishTimeMs = Math.max(1000, refEnd - room.startTime);
+            } else if (typeof body.finishTimeMs === 'number' && body.finishTimeMs >= 1000) {
+              finishTimeMs = Math.round(body.finishTimeMs);
+            } else {
+              finishTimeMs = Math.max(1000, nowMs - joinedAt);
+            }
             room._dirty = true;
           }
 
@@ -269,16 +283,15 @@ export function raceRoomPlugin() {
           const nextMapName = isClientStaleForNewRace
             ? 'Quảng Trường Ánh Sáng'
             : (body.currentMapName || 'Quảng Trường Ánh Sáng');
-          const nextIsFinished = isClientStaleForNewRace ? false : !!body.isFinished;
           const nextName = (body.playerName || 'Hò Văn Tèn').trim().slice(0, 30);
 
-          if (
+          const hasProgressChanged =
             !existing ||
             existing.solvedCount !== nextSolved ||
             existing.currentMapId !== nextMapId ||
-            existing.name !== nextName ||
-            existing.isFinished !== nextIsFinished
-          ) {
+            existing.isFinished !== nextIsFinished;
+
+          if (hasProgressChanged || existing.name !== nextName) {
             room._dirty = true;
           }
 
@@ -291,7 +304,9 @@ export function raceRoomPlugin() {
             totalPieces: typeof body.totalPieces === 'number' ? body.totalPieces : 8,
             isFinished: nextIsFinished,
             finishTimeMs,
-            lastSeen: Date.now()
+            joinedAt,
+            lastProgressAt: hasProgressChanged ? nowMs : (existing?.lastProgressAt || joinedAt),
+            lastSeen: nowMs
           });
 
           const sRoom = getSerializedRoom(room);
@@ -303,7 +318,8 @@ export function raceRoomPlugin() {
             startTime: room.startTime,
             endTime: room.endTime,
             rank: myRank,
-            totalPlayers: sRoom.playerCount
+            totalPlayers: sRoom.playerCount,
+            finishTimeMs
           }));
           return;
         }
