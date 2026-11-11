@@ -199,10 +199,15 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/race/room' && req.method === 'GET') {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     const code = (parsedUrl.searchParams.get('code') || 'DOCLAP').trim().toUpperCase();
+    const hostId = (parsedUrl.searchParams.get('hostId') || '').trim();
     let room = rooms.get(code);
     if (!room) {
       room = createDefaultRoom(code);
       rooms.set(code, room);
+    }
+    if (hostId && room.players.has(hostId)) {
+      room.players.delete(hostId);
+      room._dirty = true;
     }
     res.end(JSON.stringify({ success: true, room: getSerializedRoom(room) }));
     return;
@@ -264,6 +269,25 @@ const server = http.createServer(async (req, res) => {
     }
 
     const pid = (body.playerId || 'anonymous').trim();
+
+    // Nếu là tài khoản Admin / Host thì tuyệt đối KHÔNG tính vào danh sách người chơi
+    if (body.isHost) {
+      if (room.players.has(pid)) {
+        room.players.delete(pid);
+        room._dirty = true;
+      }
+      const sRoom = getSerializedRoom(room);
+      res.end(JSON.stringify({
+        success: true,
+        roomStatus: room.status,
+        startTime: room.startTime,
+        endTime: room.endTime,
+        rank: 0,
+        totalPlayers: sRoom.playerCount
+      }));
+      return;
+    }
+
     const existing = room.players.get(pid);
 
     let finishTimeMs = existing?.finishTimeMs || null;

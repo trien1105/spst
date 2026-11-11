@@ -2213,7 +2213,7 @@ export default function App() {
       setAdminLoginError('');
       setAdminUserInp('');
       setAdminPassInp('');
-      if (!roomCode) setRoomCode('DOCLAP');
+      setRoomCode('');
       setShowAdminLoginModal(false);
       setShowHostModal(true);
       SoundEngine.victory();
@@ -2250,7 +2250,7 @@ export default function App() {
     return `${base}${ep}`;
   }, [backendUrl]);
 
-  // 4. Mã phòng thi đấu: Khi mới vào web sẽ CHƯA ở trong phòng nào (''), trừ khi quét QR có ?room=XYZ
+  // 4. Mã phòng của Người chơi (chỉ có khi tự nhập mã hoặc quét QR ?room=XYZ)
   const [roomCode, setRoomCode] = useState(() => {
     try {
       const params = new URLSearchParams(window.location.search);
@@ -2260,6 +2260,9 @@ export default function App() {
       return '';
     }
   });
+  // Mã phòng riêng của trang Quản trị (Admin/Host) - Tách biệt hoàn toàn để Admin không bị tính là người chơi
+  const [hostRoomCode, setHostRoomCode] = useState('DOCLAP');
+  const [showServerConfig, setShowServerConfig] = useState(false);
   const [joinCodeInput, setJoinCodeInput] = useState('');
 
   // Hàm xử lý khi người chơi nhập mã code trên thanh Navbar và bấm "Vào Phòng"
@@ -2678,8 +2681,8 @@ export default function App() {
   }, [roomCode, frontendDomain, backendUrl]);
 
   const currentJoinRoomUrl = useMemo(() => {
-    return buildJoinRoomUrl(roomCode, backendUrl, frontendDomain);
-  }, [buildJoinRoomUrl, roomCode, backendUrl, frontendDomain]);
+    return buildJoinRoomUrl(hostRoomCode || 'DOCLAP', backendUrl, frontendDomain);
+  }, [buildJoinRoomUrl, hostRoomCode, backendUrl, frontendDomain]);
 
   // Chỉ sinh ảnh QR Code bên trong useEffect khi currentJoinRoomUrl thay đổi
   useEffect(() => {
@@ -2730,8 +2733,8 @@ export default function App() {
       const abortTimer = setTimeout(() => controller.abort(), 2200);
 
       try {
-        // Nếu người chơi CHƯA nhập mã phòng và CHƯA quét QR: chỉ kiểm tra kết nối Backend chứ chưa đẩy vào phòng đua
-        if (!roomCode || !roomCode.trim()) {
+        // Nếu đang mở bảng Quản trị hoặc là tài khoản Admin, hoặc chưa nhập mã phòng: tuyệt đối không tính vào người chơi
+        if (showHostModal || isAdminAuthenticated || !roomCode || !roomCode.trim()) {
           const pingRes = await fetch(getApiUrl('/api/race/info'), {
             headers: { 'Bypass-Tunnel-Reminder': 'true' },
             signal: controller.signal
@@ -2812,7 +2815,7 @@ export default function App() {
       isCancelled = true;
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [roomCode, playerId, playerName, currentMapId, currentMap, solvedIds.length, gameStatus, finishTimeMsRecord, backendUrl, getApiUrl, retryTrigger]);
+  }, [roomCode, showHostModal, isAdminAuthenticated, playerId, playerName, currentMapId, currentMap, solvedIds.length, gameStatus, finishTimeMsRecord, backendUrl, getApiUrl, retryTrigger]);
 
   // Bộ đếm thời gian thi đấu tăng mỗi giây khi trạng thái RACING
   useEffect(() => {
@@ -2836,7 +2839,9 @@ export default function App() {
       const controller = new AbortController();
       const abortId = setTimeout(() => controller.abort(), 2400);
       try {
-        const res = await fetch(getApiUrl(`/api/race/room?code=${roomCode || 'DOCLAP'}`), {
+        const targetRoom = showHostModal || showProjectorMode ? (hostRoomCode || 'DOCLAP') : (roomCode || 'DOCLAP');
+        const hostParam = showHostModal || isAdminAuthenticated ? `&hostId=${encodeURIComponent(playerId)}` : '';
+        const res = await fetch(getApiUrl(`/api/race/room?code=${encodeURIComponent(targetRoom)}${hostParam}`), {
           headers: { 'Bypass-Tunnel-Reminder': 'true' },
           signal: controller.signal
         });
@@ -2861,7 +2866,7 @@ export default function App() {
       isCancelled = true;
       if (timerId) clearTimeout(timerId);
     };
-  }, [showHostModal, showProjectorMode, showJoinModal, roomCode, getApiUrl]);
+  }, [showHostModal, showProjectorMode, showJoinModal, roomCode, hostRoomCode, isAdminAuthenticated, playerId, getApiUrl]);
 
   // Host phát lệnh Bắt đầu cuộc đua -> Tự động chuyển màn hình Admin sang Bảng Xếp Hạng Top 1 -> Hết
   const handleHostStartRace = async () => {
@@ -2877,7 +2882,7 @@ export default function App() {
           'Content-Type': 'application/json',
           'Bypass-Tunnel-Reminder': 'true'
         },
-        body: JSON.stringify({ roomCode, action: 'START' })
+        body: JSON.stringify({ roomCode: hostRoomCode, action: 'START' })
       });
       if (res.ok) {
         const data = await res.json();
@@ -2898,7 +2903,7 @@ export default function App() {
           'Content-Type': 'application/json',
           'Bypass-Tunnel-Reminder': 'true'
         },
-        body: JSON.stringify({ roomCode, action: 'RESET' })
+        body: JSON.stringify({ roomCode: hostRoomCode, action: 'RESET' })
       });
       if (res.ok) {
         const data = await res.json();
@@ -2921,7 +2926,7 @@ export default function App() {
           'Content-Type': 'application/json',
           'Bypass-Tunnel-Reminder': 'true'
         },
-        body: JSON.stringify({ roomCode, action: 'END' })
+        body: JSON.stringify({ roomCode: hostRoomCode, action: 'END' })
       });
       if (res.ok) {
         const data = await res.json();
@@ -2937,7 +2942,7 @@ export default function App() {
     const code = (newCode || 'DOCLAP').trim().toUpperCase();
     if (!code) return;
     try {
-      setRoomCode(code);
+      setHostRoomCode(code);
       setCustomRoomInput('');
       setHostTabMode('LOBBY_QR');
       const res = await fetch(getApiUrl('/api/race/create'), {
@@ -4210,19 +4215,18 @@ export default function App() {
             </div>
           )}
 
-          {/* NÚT DÀNH CHO HOST / ADMIN */}
+          {/* NÚT QUẢN TRỊ VIÊN (HOST) */}
           {isHostMachine ? (
             <button
               type="button"
               onClick={() => {
-                if (!roomCode) setRoomCode('DOCLAP');
+                setRoomCode('');
                 setShowHostModal(true);
               }}
-              className="flex items-center space-x-1 px-2.5 py-1 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-stone-950 font-black rounded-lg text-[11px] shadow transition active:scale-95"
-              title="Mở Bảng Điều Hành Phòng Đua (Quyền Host Admin)"
+              className="px-2.5 py-1 bg-neutral-200 hover:bg-white text-neutral-900 font-semibold rounded-md text-[11px] transition"
+              title="Mở trang Quản trị phòng thi"
             >
-              <QrCode className="w-3.5 h-3.5 text-stone-950" />
-              <span>👑 ĐIỀU HÀNH HOST</span>
+              Quản trị
             </button>
           ) : (
             <button
@@ -4231,10 +4235,10 @@ export default function App() {
                 setAdminLoginError('');
                 setShowAdminLoginModal(true);
               }}
-              className="flex items-center space-x-1 px-2 py-1 bg-red-950/80 hover:bg-red-900 border border-amber-500/40 text-amber-300 font-bold rounded-lg text-[11px] transition"
-              title="Đăng nhập tài khoản Admin để Tổ chức Phòng Đua (Host)"
+              className="px-2.5 py-1 bg-neutral-800 hover:bg-neutral-700 border border-neutral-600 text-neutral-200 font-medium rounded-md text-[11px] transition"
+              title="Đăng nhập Quản trị viên"
             >
-              <span>🔑 Host</span>
+              Quản trị
             </button>
           )}
         </div>
@@ -5172,10 +5176,12 @@ export default function App() {
       )}
 
       {/* ===================================================================
-          10. MÀN HÌNH QUẢN TRỊ HOST (2 GIAI ĐOẠN: SẢNH CHỜ QR + MÃ PHÒNG ➔ BXH TOP 1 ĐẾN HẾT)
+          10. TRANG QUẢN TRỊ PHÒNG THI (GIAO DIỆN TỐI GIẢN, CHUẨN QUẢN TRỊ, KHÔNG TÍNH ADMIN)
       =================================================================== */}
       {isHostMachine && showHostModal && (() => {
-        const allPlayers = raceRoomData?.leaderboard || [];
+        // Loại bỏ hoàn toàn tài khoản Admin khỏi danh sách người chơi
+        const rawList = raceRoomData?.leaderboard || [];
+        const allPlayers = rawList.filter((p) => p.id !== playerId);
         const isRacingOrFinished = raceRoomData?.status === 'RACING' || raceRoomData?.status === 'FINISHED';
         const activeView =
           hostTabMode === 'LOBBY_QR'
@@ -5201,257 +5207,253 @@ export default function App() {
           'map-5-ba-dinh': 6
         };
 
+        const finishedCount = allPlayers.filter((p) => p.isFinished).length;
+
         return (
-          <div className="fixed inset-0 z-50 bg-[#08110e]/95 backdrop-blur-md flex flex-col p-3 sm:p-6 overflow-hidden animate-fadeIn">
-            <div className="bg-gradient-to-b from-[#172821] to-[#0d1814] border-2 border-amber-400/80 rounded-3xl max-w-6xl w-full mx-auto p-4 sm:p-6 shadow-2xl relative text-stone-100 flex flex-col flex-1 overflow-hidden">
-              {/* TOP HEADER CỦA MÀN HÌNH ADMIN */}
-              <div className="flex items-center justify-between border-b border-amber-500/30 pb-3.5 mb-4 flex-wrap gap-3">
-                <div className="flex items-center space-x-3">
-                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-red-700 to-amber-600 border border-amber-300 flex items-center justify-center shadow-lg">
-                    <Trophy className="w-6 h-6 text-yellow-300" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h2 className="text-base sm:text-xl font-black text-amber-300 uppercase tracking-wide">
-                        ĐIỀU HÀNH PHÒNG ĐUA • CON ĐƯỜNG ĐỘC LẬP
-                      </h2>
-                      <span className="text-xs bg-amber-500 text-stone-950 font-black px-2.5 py-0.5 rounded-full font-mono">
-                        MÃ PHÒNG: {roomCode}
-                      </span>
-                    </div>
-                    <p className="text-xs text-stone-400 mt-0.5">
-                      {activeView === 'LOBBY_QR'
-                        ? '✦ Sảnh chờ: Học sinh/Người chơi quét mã QR hoặc nhập Mã Phòng để vào sảnh'
-                        : `✦ Đang theo dõi trực tiếp ${allPlayers.length} người chơi • Sắp xếp tự động từ Top 1 đến hết`}
-                    </p>
-                  </div>
+          <div className="fixed inset-0 z-50 bg-[#111315] text-neutral-100 flex flex-col font-sans">
+            {/* Thanh tiêu đề Quản trị */}
+            <div className="h-14 border-b border-neutral-800 bg-[#16191d] px-4 sm:px-6 flex items-center justify-between shrink-0">
+              <div className="flex items-center space-x-4">
+                <span className="text-sm font-bold tracking-tight text-neutral-100 uppercase">
+                  Quản trị phòng thi
+                </span>
+                <span className="h-4 w-px bg-neutral-700" />
+                <div className="flex items-center space-x-2 text-xs">
+                  <span className="text-neutral-400">Mã phòng:</span>
+                  <span className="font-mono font-bold text-amber-400 bg-neutral-900 border border-neutral-700 px-2 py-0.5 rounded">
+                    {hostRoomCode}
+                  </span>
                 </div>
-
-                {/* CÁC NÚT CHUYỂN CHẾ ĐỘ XEM & ĐIỀU KHIỂN NHANH */}
-                <div className="flex items-center space-x-2 flex-wrap">
-                  <div className="flex bg-[#0a1410] p-1 rounded-xl border border-[#254236]">
-                    <button
-                      onClick={() => setHostTabMode('LOBBY_QR')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-black transition flex items-center gap-1.5 ${
-                        activeView === 'LOBBY_QR'
-                          ? 'bg-amber-500 text-stone-950 shadow'
-                          : 'text-stone-300 hover:text-amber-300'
-                      }`}
-                    >
-                      <QrCode className="w-3.5 h-3.5" />
-                      <span>1. Mã QR & Sảnh Chờ</span>
-                    </button>
-                    <button
-                      onClick={() => setHostTabMode('LIVE_RANKING')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-black transition flex items-center gap-1.5 ${
-                        activeView === 'LIVE_RANKING'
-                          ? 'bg-amber-500 text-stone-950 shadow'
-                          : 'text-stone-300 hover:text-amber-300'
-                      }`}
-                    >
-                      <Trophy className="w-3.5 h-3.5" />
-                      <span>2. BXH Trực Tiếp (Top 1 ➔ Hết)</span>
-                    </button>
-                  </div>
-
-                  {isAdminAuthenticated && (
-                    <button
-                      onClick={handleAdminLogout}
-                      className="px-3 py-1.5 bg-red-950/80 hover:bg-red-900 border border-red-500/40 text-red-200 font-bold text-xs rounded-xl transition"
-                    >
-                      Đăng xuất Admin
-                    </button>
-                  )}
-
-                  <button
-                    onClick={() => setShowHostModal(false)}
-                    className="text-stone-300 hover:text-white transition px-2.5 py-1.5 bg-[#172b24] hover:bg-[#223e34] rounded-xl text-sm font-black"
-                    title="Đóng bảng điều hành"
-                  >
-                    ✕ Đóng
-                  </button>
+                <div className="hidden md:flex items-center space-x-2 text-xs">
+                  <span className="text-neutral-400">Trạng thái:</span>
+                  <span className="font-medium text-neutral-200">
+                    {raceRoomData?.status === 'RACING'
+                      ? 'Đang diễn ra'
+                      : raceRoomData?.status === 'FINISHED'
+                      ? 'Đã kết thúc'
+                      : 'Chờ bắt đầu'}
+                  </span>
                 </div>
               </div>
 
+              <div className="flex items-center space-x-2">
+                {/* Chuyển tab Sảnh chờ / Bảng xếp hạng */}
+                <div className="flex bg-neutral-900 p-0.5 rounded-md border border-neutral-800 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setHostTabMode('LOBBY_QR')}
+                    className={`px-3 py-1 rounded transition ${
+                      activeView === 'LOBBY_QR'
+                        ? 'bg-neutral-700 text-white font-semibold'
+                        : 'text-neutral-400 hover:text-neutral-200'
+                    }`}
+                  >
+                    Sảnh chờ & Mã QR
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHostTabMode('LIVE_RANKING')}
+                    className={`px-3 py-1 rounded transition ${
+                      activeView === 'LIVE_RANKING'
+                        ? 'bg-neutral-700 text-white font-semibold'
+                        : 'text-neutral-400 hover:text-neutral-200'
+                    }`}
+                  >
+                    Bảng xếp hạng ({allPlayers.length})
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowServerConfig((v) => !v)}
+                  className="px-2.5 py-1.5 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-300 text-xs rounded-md transition"
+                >
+                  Cấu hình
+                </button>
+
+                {isAdminAuthenticated && (
+                  <button
+                    type="button"
+                    onClick={handleAdminLogout}
+                    className="px-2.5 py-1.5 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-red-400 text-xs rounded-md transition"
+                  >
+                    Đăng xuất
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setShowHostModal(false)}
+                  className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 text-xs font-medium rounded-md transition"
+                >
+                  Đóng
+                </button>
+              </div>
+            </div>
+
+            {/* Khung cấu hình máy chủ (ẩn/hiện gọn gàng khi bấm nút Cấu hình) */}
+            {showServerConfig && (
+              <div className="border-b border-neutral-800 bg-[#14171a] px-6 py-3 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                <div>
+                  <label className="text-neutral-400 block mb-1">Đổi mã phòng:</label>
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      value={customRoomInput}
+                      onChange={(e) => setCustomRoomInput(e.target.value.toUpperCase())}
+                      placeholder="Nhập mã mới..."
+                      maxLength={10}
+                      className="bg-neutral-900 border border-neutral-700 text-neutral-100 font-mono px-2.5 py-1 rounded flex-1 focus:outline-none focus:border-neutral-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleCreateNewRoom(customRoomInput)}
+                      className="px-3 py-1 bg-neutral-700 hover:bg-neutral-600 text-white font-medium rounded"
+                    >
+                      Áp dụng
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-neutral-400 block mb-1">Địa chỉ giao diện (Frontend):</label>
+                  <input
+                    type="text"
+                    value={frontendDomain}
+                    onChange={(e) => setFrontendDomain(e.target.value)}
+                    className="w-full bg-neutral-900 border border-neutral-700 text-neutral-200 font-mono px-2.5 py-1 rounded focus:outline-none focus:border-neutral-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-neutral-400 block mb-1">Địa chỉ máy chủ (Backend):</label>
+                  <input
+                    type="text"
+                    value={backendUrl}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setBackendUrl(val);
+                      try {
+                        localStorage.setItem('cddl_backend_url', val);
+                      } catch {}
+                    }}
+                    className="w-full bg-neutral-900 border border-neutral-700 text-neutral-200 font-mono px-2.5 py-1 rounded focus:outline-none focus:border-neutral-500"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* NỘI DUNG CHÍNH */}
+            <div className="flex-1 overflow-hidden p-4 sm:p-6 max-w-6xl w-full mx-auto flex flex-col">
               {/* ===============================================================
-                  CHẾ ĐỘ 1: SẢNH CHỜ HIỆN MÃ QR TO RÕ + MÃ PHÒNG + DANH SÁCH VÀO SẢNH
+                  MÀN HÌNH 1: SẢNH CHỜ (HIỆN QR + MÃ CODE & DANH SÁCH NGƯỜI THAM GIA)
               =============================================================== */}
               {activeView === 'LOBBY_QR' && (
-                <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 overflow-y-auto pr-1">
-                  {/* Cột Trái (5 cột): MÃ QR KHỔNG LỒ & MÃ CODE PHÒNG */}
-                  <div className="lg:col-span-5 bg-[#0a1410] border-2 border-amber-400/50 rounded-3xl p-5 flex flex-col items-center justify-between text-center shadow-inner">
-                    <div className="w-full">
-                      <span className="inline-block text-[11px] font-mono font-black uppercase tracking-widest bg-amber-500/20 text-amber-300 border border-amber-400/40 px-3 py-1 rounded-full mb-2">
-                        QUÉT MÃ QR ĐỂ VÀO PHÒNG ĐUA
-                      </span>
-
-                      {/* Hộp Mã Phòng Cực Lớn */}
-                      <div className="my-2 bg-gradient-to-r from-[#240b0b] via-[#381111] to-[#240b0b] border-2 border-amber-400 rounded-2xl py-2.5 px-4 shadow-lg">
-                        <div className="text-[10px] font-bold text-amber-200/80 uppercase tracking-widest">
-                          MÃ PHÒNG THI ĐẤU (ROOM CODE)
-                        </div>
-                        <div className="text-3xl sm:text-4xl font-black font-mono text-yellow-300 tracking-widest mt-0.5">
-                          {roomCode}
-                        </div>
+                <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 overflow-hidden">
+                  {/* Cột trái: Mã QR và Mã Phòng */}
+                  <div className="lg:col-span-5 bg-[#16191d] border border-neutral-800 rounded-lg p-6 flex flex-col items-center justify-between">
+                    <div className="w-full text-center">
+                      <div className="text-xs text-neutral-400 uppercase tracking-wider">
+                        Mã tham gia phòng thi
+                      </div>
+                      <div className="mt-2 py-3 px-4 bg-[#111315] border border-neutral-800 rounded-md font-mono text-4xl font-bold text-amber-400 tracking-widest">
+                        {hostRoomCode}
                       </div>
                     </div>
 
-                    {/* Ảnh QR Code To Rõ */}
-                    <div className="my-2">
+                    <div className="my-4">
                       {qrCodeDataUrl ? (
                         <img
                           src={qrCodeDataUrl}
-                          alt="QR Code Phòng Đua"
-                          className="w-56 h-56 sm:w-64 sm:h-64 rounded-3xl bg-white p-3 border-4 border-amber-400 shadow-2xl mx-auto"
+                          alt="Mã QR"
+                          className="w-60 h-60 sm:w-64 sm:h-64 bg-white p-3 rounded-md border border-neutral-700"
                         />
                       ) : (
-                        <div className="w-56 h-56 sm:w-64 sm:h-64 rounded-3xl bg-black/40 border-2 border-stone-700 flex items-center justify-center text-xs text-stone-400 mx-auto">
+                        <div className="w-60 h-60 sm:w-64 sm:h-64 bg-neutral-900 border border-neutral-800 rounded-md flex items-center justify-center text-xs text-neutral-500">
                           Đang tạo mã QR...
                         </div>
                       )}
                     </div>
 
-                    {/* Link tham gia & Đổi mã phòng */}
-                    <div className="w-full space-y-2 mt-2">
-                      <div className="w-full bg-[#13251e] border border-[#2b4c3f] rounded-xl p-2 text-xs flex items-center justify-between gap-2">
-                        <span className="font-mono text-amber-200 truncate select-all text-[11px]" title={currentJoinRoomUrl}>
+                    <div className="w-full space-y-2">
+                      <div className="text-[11px] text-neutral-400 text-center">
+                        Quét mã QR hoặc truy cập địa chỉ bên dưới và nhập mã <b>{hostRoomCode}</b>
+                      </div>
+                      <div className="flex items-center gap-2 bg-[#111315] border border-neutral-800 rounded-md px-3 py-2">
+                        <span className="font-mono text-xs text-neutral-300 truncate flex-1 select-all">
                           {currentJoinRoomUrl}
                         </span>
                         <button
+                          type="button"
                           onClick={handleCopyJoinLink}
-                          className="shrink-0 px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-stone-950 rounded-lg transition flex items-center gap-1 font-black text-[11px]"
+                          className="px-2.5 py-1 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 text-xs rounded transition shrink-0"
                         >
-                          {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                          <span>{copiedLink ? 'Đã chép' : 'Copy Link'}</span>
-                        </button>
-                      </div>
-
-                      <div className="flex w-full gap-1.5">
-                        <input
-                          type="text"
-                          value={customRoomInput}
-                          onChange={(e) => setCustomRoomInput(e.target.value.toUpperCase())}
-                          placeholder="Đổi mã phòng mới (VD: DOCLAP)..."
-                          maxLength={10}
-                          className="bg-[#111e19] border border-[#2d4b3e] text-xs font-mono font-bold text-amber-300 px-3 py-2 rounded-xl flex-1 focus:outline-none focus:border-amber-400"
-                        />
-                        <button
-                          onClick={() => handleCreateNewRoom(customRoomInput)}
-                          className="bg-amber-600 hover:bg-amber-500 text-stone-950 font-black text-xs px-4 py-2 rounded-xl transition"
-                        >
-                          Đổi Mã
+                          {copiedLink ? 'Đã chép' : 'Sao chép'}
                         </button>
                       </div>
                     </div>
                   </div>
 
-                  {/* Cột Phải (7 cột): CẤU HÌNH KẾT NỐI + DANH SÁCH NGƯỜI CHƠI ĐANG VÀO SẢNH + NÚT BẮT ĐẦU */}
-                  <div className="lg:col-span-7 flex flex-col justify-between bg-[#0a1410] border border-[#233a30] rounded-3xl p-5">
-                    <div className="space-y-4">
-                      {/* Thống kê nhanh */}
-                      <div className="grid grid-cols-3 gap-3">
-                        <div className="bg-[#13261e] border border-amber-500/40 rounded-2xl p-3 text-center">
-                          <div className="text-[11px] font-bold text-amber-200 uppercase">Thí Sinh Trong Sảnh</div>
-                          <div className="text-3xl font-black text-yellow-300 mt-1">
-                            {allPlayers.length}
-                          </div>
-                        </div>
-                        <div className="bg-[#13261e] border border-[#28483b] rounded-2xl p-3 text-center">
-                          <div className="text-[11px] font-bold text-stone-400 uppercase">Trạng Thái</div>
-                          <div className="text-sm font-black text-emerald-400 mt-2 uppercase">
-                            {raceRoomData?.status === 'RACING' ? '🔥 ĐANG ĐUA' : '⏳ SẢNH CHỜ'}
-                          </div>
-                        </div>
-                        <div className="bg-[#13261e] border border-[#28483b] rounded-2xl p-3 text-center">
-                          <div className="text-[11px] font-bold text-stone-400 uppercase">Đồng Hồ Đua</div>
-                          <div className="text-2xl font-black font-mono text-amber-200 mt-1">
-                            {formatRaceTime(raceElapsedSeconds)}
-                          </div>
-                        </div>
+                  {/* Cột phải: Danh sách người chơi đã vào phòng (Không tính Admin) */}
+                  <div className="lg:col-span-7 bg-[#16191d] border border-neutral-800 rounded-lg p-6 flex flex-col justify-between overflow-hidden">
+                    <div className="flex items-center justify-between border-b border-neutral-800 pb-4">
+                      <div>
+                        <h3 className="text-base font-semibold text-neutral-100">
+                          Người chơi đã vào phòng
+                        </h3>
+                        <p className="text-xs text-neutral-400 mt-0.5">
+                          Chỉ tính người chơi thực tế (không tính tài khoản quản trị)
+                        </p>
                       </div>
-
-                      {/* Cấu hình Domain & Backend */}
-                      <div className="bg-[#101f19] border border-[#233d32] rounded-2xl p-3 grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-left">
-                        <div>
-                          <label className="text-[10px] font-bold text-amber-300 block mb-1">
-                            🌐 Link Giao Diện (Vercel):
-                          </label>
-                          <input
-                            type="text"
-                            value={frontendDomain}
-                            onChange={(e) => setFrontendDomain(e.target.value)}
-                            placeholder="https://conduongdoclap.vercel.app"
-                            className="w-full bg-[#0a1410] border border-[#284639] text-xs text-stone-200 px-2.5 py-1.5 rounded-lg font-mono focus:outline-none focus:border-amber-400"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-bold text-emerald-300 block mb-1">
-                            ⚡ Máy Chủ Backend (PC Host / Tunnel):
-                          </label>
-                          <input
-                            type="text"
-                            value={backendUrl}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setBackendUrl(val);
-                              try {
-                                localStorage.setItem('cddl_backend_url', val);
-                              } catch {}
-                            }}
-                            placeholder="http://localhost:4000 hoặc https://..."
-                            className="w-full bg-[#0a1410] border border-[#284639] text-xs text-emerald-300 px-2.5 py-1.5 rounded-lg font-mono focus:outline-none focus:border-emerald-400"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Danh sách thí sinh đã quét QR vào phòng */}
-                      <div className="bg-[#0e1b16] border border-[#213a30] rounded-2xl p-3.5">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs font-black text-amber-300 uppercase flex items-center gap-1.5">
-                            <Users className="w-4 h-4 text-amber-400" />
-                            <span>DANH SÁCH NGƯỜI CHƠI ĐÃ VÀO SẢNH ({allPlayers.length})</span>
-                          </span>
-                          <span className="text-[11px] text-emerald-400 animate-pulse">
-                            ● Tự động cập nhật khi có người quét QR
-                          </span>
-                        </div>
-
-                        <div className="max-h-48 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-2 pr-1">
-                          {allPlayers.map((p, idx) => (
-                            <div
-                              key={p.id}
-                              className="bg-[#152820] border border-[#264639] rounded-xl px-2.5 py-1.5 flex items-center space-x-2 text-xs"
-                            >
-                              <span className="w-5 h-5 rounded-full bg-amber-500/20 border border-amber-400/50 text-amber-300 font-mono font-black text-[10px] flex items-center justify-center shrink-0">
-                                {idx + 1}
-                              </span>
-                              <span className="font-bold text-stone-100 truncate">{p.name}</span>
-                            </div>
-                          ))}
-                          {allPlayers.length === 0 && (
-                            <div className="col-span-full py-8 text-center text-xs text-stone-400">
-                              Đang chờ người chơi quét mã QR để vào sảnh...
-                            </div>
-                          )}
-                        </div>
+                      <div className="text-right">
+                        <span className="text-2xl font-mono font-bold text-neutral-100">
+                          {allPlayers.length}
+                        </span>
+                        <span className="text-xs text-neutral-400 block">người chơi</span>
                       </div>
                     </div>
 
-                    {/* Nút Bắt Đầu Đua Lớn */}
-                    <div className="mt-4 pt-3 border-t border-[#1e352b] flex flex-col sm:flex-row gap-2.5">
+                    <div className="flex-1 overflow-y-auto my-4 pr-1">
+                      {allPlayers.length > 0 ? (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                          {allPlayers.map((p, idx) => (
+                            <div
+                              key={p.id}
+                              className="bg-[#111315] border border-neutral-800 rounded-md px-3 py-2 flex items-center space-x-2.5 text-xs"
+                            >
+                              <span className="font-mono text-neutral-500 w-5">
+                                {String(idx + 1).padStart(2, '0')}.
+                              </span>
+                              <span className="font-medium text-neutral-200 truncate flex-1">
+                                {p.name}
+                              </span>
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                                  p.isOnline ? 'bg-emerald-500' : 'bg-neutral-600'
+                                }`}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="h-full flex items-center justify-center text-xs text-neutral-500 border border-dashed border-neutral-800 rounded-md">
+                          Chưa có người chơi nào tham gia phòng.
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="border-t border-neutral-800 pt-4 flex items-center justify-between gap-3">
                       <button
-                        onClick={handleHostStartRace}
-                        className="flex-1 py-4 bg-gradient-to-r from-emerald-500 via-green-400 to-emerald-500 hover:from-emerald-400 hover:to-green-300 text-stone-950 font-black rounded-2xl text-sm sm:text-base uppercase tracking-wider transition shadow-xl flex items-center justify-center gap-2 active:scale-95"
+                        type="button"
+                        onClick={handleHostResetRace}
+                        className="px-4 py-2.5 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-300 text-xs font-medium rounded-md transition"
                       >
-                        <Play className="w-5 h-5 fill-current" />
-                        <span>BẮT ĐẦU CUỘC ĐUA (XẾP HẠNG TRỰC TIẾP TOP 1 ➔ HẾT)</span>
+                        Đặt lại phòng
                       </button>
                       <button
-                        onClick={handleHostResetRace}
-                        className="px-4 py-4 bg-[#172b22] hover:bg-[#213d30] border border-[#2d5040] text-stone-200 font-bold rounded-2xl text-xs uppercase transition flex items-center justify-center gap-1.5"
+                        type="button"
+                        onClick={handleHostStartRace}
+                        className="flex-1 py-2.5 bg-red-700 hover:bg-red-600 text-white font-semibold rounded-md text-sm transition"
                       >
-                        <RefreshCw className="w-4 h-4 text-amber-400" />
-                        <span>Làm Mới</span>
+                        Bắt đầu phần thi
                       </button>
                     </div>
                   </div>
@@ -5459,175 +5461,90 @@ export default function App() {
               )}
 
               {/* ===============================================================
-                  CHẾ ĐỘ 2: KHI ĐANG CHƠI - SẮP XẾP TỪNG NGƯỜI CHƠI TỪ TOP 1 ĐẾN HẾT
+                  MÀN HÌNH 2: KHI ĐANG CHƠI (BẢNG XẾP HẠNG TỪ TOP 1 ĐẾN HẾT)
               =============================================================== */}
               {activeView === 'LIVE_RANKING' && (
-                <div className="flex-1 flex flex-col overflow-hidden">
-                  {/* Thanh thông tin đua & Điều khiển trên cùng */}
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 mb-4">
-                    {/* Hộp thông tin Mã Phòng + QR thu gọn cho người vào muộn (4 cột) */}
-                    <div className="lg:col-span-4 bg-[#0a1410] border border-amber-500/40 rounded-2xl p-3 flex items-center gap-3">
-                      {qrCodeDataUrl && (
-                        <img
-                          src={qrCodeDataUrl}
-                          alt="QR"
-                          onClick={() => setHostTabMode('LOBBY_QR')}
-                          className="w-16 h-16 rounded-xl bg-white p-1 border border-amber-400 cursor-pointer shrink-0 hover:scale-105 transition"
-                          title="Bấm để phóng to mã QR"
-                        />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[10px] font-bold text-amber-300 uppercase">
-                          Mã Phòng Đang Đua:
-                        </div>
-                        <div className="text-2xl font-black font-mono text-yellow-300 tracking-wider">
-                          {roomCode}
-                        </div>
-                        <button
-                          onClick={() => setHostTabMode('LOBBY_QR')}
-                          className="text-[11px] text-emerald-400 hover:underline font-bold"
-                        >
-                          🔍 Phóng to Mã QR cho người vào sau
-                        </button>
+                <div className="flex-1 flex flex-col overflow-hidden space-y-4">
+                  {/* Thanh chỉ số tóm tắt */}
+                  <div className="bg-[#16191d] border border-neutral-800 rounded-lg px-5 py-3.5 flex items-center justify-between flex-wrap gap-4">
+                    <div className="flex items-center space-x-6 sm:space-x-8 text-xs">
+                      <div>
+                        <span className="text-neutral-400 block">Mã phòng</span>
+                        <span className="font-mono text-base font-bold text-amber-400">{hostRoomCode}</span>
                       </div>
-                    </div>
-
-                    {/* 3 Thẻ chỉ số Thời gian thực (5 cột) */}
-                    <div className="lg:col-span-5 grid grid-cols-3 gap-2.5">
-                      <div className="bg-[#12231c] border border-[#254437] rounded-2xl p-2.5 text-center flex flex-col justify-center">
-                        <div className="text-[10px] font-bold text-stone-400 uppercase">Đang Đua</div>
-                        <div className="text-2xl font-black text-amber-300">{allPlayers.length}</div>
+                      <div className="h-7 w-px bg-neutral-800" />
+                      <div>
+                        <span className="text-neutral-400 block">Số người chơi</span>
+                        <span className="font-mono text-base font-bold text-neutral-100">{allPlayers.length}</span>
                       </div>
-                      <div className="bg-[#12231c] border border-[#254437] rounded-2xl p-2.5 text-center flex flex-col justify-center">
-                        <div className="text-[10px] font-bold text-stone-400 uppercase">Đã Về Đích</div>
-                        <div className="text-2xl font-black text-emerald-400">
-                          {allPlayers.filter((p) => p.isFinished).length}
-                        </div>
+                      <div className="h-7 w-px bg-neutral-800" />
+                      <div>
+                        <span className="text-neutral-400 block">Đã hoàn thành</span>
+                        <span className="font-mono text-base font-bold text-emerald-400">
+                          {finishedCount} / {allPlayers.length}
+                        </span>
                       </div>
-                      <div className="bg-[#12231c] border border-amber-400/50 rounded-2xl p-2.5 text-center flex flex-col justify-center">
-                        <div className="text-[10px] font-bold text-amber-300 uppercase">Thời Gian</div>
-                        <div className="text-2xl font-black font-mono text-emerald-400">
+                      <div className="h-7 w-px bg-neutral-800" />
+                      <div>
+                        <span className="text-neutral-400 block">Thời gian</span>
+                        <span className="font-mono text-base font-bold text-neutral-100">
                           {formatRaceTime(raceElapsedSeconds)}
-                        </div>
+                        </span>
                       </div>
                     </div>
 
-                    {/* Cụm nút điều khiển (3 cột) */}
-                    <div className="lg:col-span-3 flex flex-col justify-center gap-1.5">
-                      {raceRoomData?.status !== 'RACING' ? (
+                    <div className="flex items-center space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => setHostTabMode('LOBBY_QR')}
+                        className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-300 text-xs rounded-md transition"
+                      >
+                        Hiện mã QR
+                      </button>
+                      {raceRoomData?.status === 'RACING' ? (
                         <button
-                          onClick={handleHostStartRace}
-                          className="w-full py-2 bg-emerald-500 hover:bg-emerald-400 text-stone-950 font-black rounded-xl text-xs uppercase flex items-center justify-center gap-1.5 shadow"
+                          type="button"
+                          onClick={handleHostEndRace}
+                          className="px-3 py-1.5 bg-red-800 hover:bg-red-700 text-white text-xs font-medium rounded-md transition"
                         >
-                          <Play className="w-3.5 h-3.5 fill-current" />
-                          <span>Phát Lệnh Bắt Đầu Đua</span>
+                          Kết thúc
                         </button>
                       ) : (
                         <button
-                          onClick={handleHostEndRace}
-                          className="w-full py-2 bg-red-900 hover:bg-red-800 border border-red-400/50 text-red-100 font-black rounded-xl text-xs uppercase flex items-center justify-center gap-1.5"
+                          type="button"
+                          onClick={handleHostStartRace}
+                          className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-medium rounded-md transition"
                         >
-                          <StopCircle className="w-3.5 h-3.5 text-red-300" />
-                          <span>Kết Thúc Cuộc Đua</span>
+                          Bắt đầu
                         </button>
                       )}
                       <button
+                        type="button"
                         onClick={handleHostResetRace}
-                        className="w-full py-1.5 bg-[#162921] hover:bg-[#1f392e] border border-[#2b4d3e] text-stone-300 font-bold rounded-xl text-xs uppercase flex items-center justify-center gap-1.5"
+                        className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-300 text-xs rounded-md transition"
                       >
-                        <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
-                        <span>Reset Về Sảnh QR</span>
+                        Đặt lại
                       </button>
                     </div>
                   </div>
 
-                  {/* BỤC VINH DANH TOP 1 - TOP 2 - TOP 3 TRỰC TIẾP */}
-                  {allPlayers.length > 0 && (
-                    <div className="grid grid-cols-3 gap-3 mb-4">
-                      {/* TOP 2 */}
-                      <div className="bg-gradient-to-b from-slate-800/70 to-[#101f19] border border-slate-400/50 rounded-2xl p-3 flex items-center space-x-3">
-                        <div className="text-2xl sm:text-3xl shrink-0">🥈</div>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-[10px] font-black text-slate-300 uppercase">HẠNG #2 • Á QUÂN 1</div>
-                          <div className="text-sm sm:text-base font-black text-white truncate">
-                            {allPlayers[1]?.name || 'Đang chờ...'}
-                          </div>
-                          <div className="text-[11px] font-mono text-emerald-400">
-                            {allPlayers[1]
-                              ? `${allPlayers[1].currentMapName} • ${allPlayers[1].solvedCount}/8 câu`
-                              : '---'}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* TOP 1 */}
-                      <div className="bg-gradient-to-b from-amber-900/70 via-yellow-950/60 to-[#14261e] border-2 border-yellow-400 rounded-2xl p-3 flex items-center space-x-3 shadow-xl">
-                        <div className="text-3xl sm:text-4xl shrink-0">👑</div>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-[10px] font-black text-yellow-300 uppercase tracking-wider">
-                            HẠNG #1 • DẪN ĐẦU ĐOÀN ĐUA
-                          </div>
-                          <div className="text-base sm:text-lg font-black text-amber-200 truncate">
-                            {allPlayers[0]?.name || 'Đang chờ...'}
-                          </div>
-                          <div className="text-[11px] font-mono font-bold text-emerald-300">
-                            {allPlayers[0]
-                              ? `${allPlayers[0].currentMapName} • ${allPlayers[0].solvedCount}/8 câu`
-                              : '---'}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* TOP 3 */}
-                      <div className="bg-gradient-to-b from-amber-950/70 to-[#101f19] border border-amber-600/50 rounded-2xl p-3 flex items-center space-x-3">
-                        <div className="text-2xl sm:text-3xl shrink-0">🥉</div>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-[10px] font-black text-amber-400 uppercase">HẠNG #3 • Á QUÂN 2</div>
-                          <div className="text-sm sm:text-base font-black text-white truncate">
-                            {allPlayers[2]?.name || 'Đang chờ...'}
-                          </div>
-                          <div className="text-[11px] font-mono text-emerald-400">
-                            {allPlayers[2]
-                              ? `${allPlayers[2].currentMapName} • ${allPlayers[2].solvedCount}/8 câu`
-                              : '---'}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* BẢNG XẾP HẠNG ĐẦY ĐỦ TỪ TOP 1 ĐẾN HẾT (1 ➔ N) */}
-                  <div className="flex-1 overflow-hidden flex flex-col bg-[#0a1410] border border-[#233a30] rounded-2xl p-3 sm:p-4">
-                    <div className="flex items-center justify-between mb-2.5 flex-wrap gap-2">
-                      <span className="text-xs font-black text-amber-300 uppercase flex items-center gap-1.5">
-                        <Trophy className="w-4 h-4 text-yellow-400" />
-                        <span>
-                          BẢNG XẾP HẠNG TRỰC TIẾP TOÀN BỘ NGƯỜI CHƠI (TỪ TOP 1 ➔ TOP {Math.max(1, allPlayers.length)})
-                        </span>
-                      </span>
-                      <span className="text-[11px] text-emerald-400 font-semibold">
-                        ● Cập nhật thời gian thực: Về đích trước ➔ Chiến khu cao nhất ➔ Số câu hoàn thành
-                      </span>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto pr-1">
-                      <table className="w-full text-left text-xs">
-                        <thead className="bg-[#14261f] text-amber-300 font-bold sticky top-0 z-10 border-b border-[#2b483c]">
+                  {/* Bảng danh sách người chơi xếp hạng từ 1 đến hết */}
+                  <div className="flex-1 bg-[#16191d] border border-neutral-800 rounded-lg overflow-hidden flex flex-col">
+                    <div className="flex-1 overflow-y-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead className="bg-[#121417] text-neutral-400 font-medium sticky top-0 z-10 border-b border-neutral-800">
                           <tr>
-                            <th className="py-2.5 px-3 w-16 text-center">Hạng</th>
-                            <th className="py-2.5 px-3">Người chơi</th>
-                            <th className="py-2.5 px-3">Chiến khu hiện tại</th>
-                            <th className="py-2.5 px-3 w-48">Tiến độ hành trình</th>
-                            <th className="py-2.5 px-3 text-center">Thời gian</th>
-                            <th className="py-2.5 px-3 text-right">Trạng thái</th>
+                            <th className="py-3 px-4 w-16">Hạng</th>
+                            <th className="py-3 px-4">Người chơi</th>
+                            <th className="py-3 px-4">Khu vực hiện tại</th>
+                            <th className="py-3 px-4 w-56">Tiến độ</th>
+                            <th className="py-3 px-4 text-right w-28">Thời gian</th>
+                            <th className="py-3 px-4 text-right w-36">Trạng thái</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-[#182d24]">
+                        <tbody className="divide-y divide-neutral-800/70">
                           {allPlayers.map((p, idx) => {
                             const rank = idx + 1;
-                            const isTop1 = rank === 1;
-                            const isTop2 = rank === 2;
-                            const isTop3 = rank === 3;
                             const stepNum = MAP_STEP_NUM[p.currentMapId] || 1;
                             const progressPct = p.isFinished
                               ? 100
@@ -5636,79 +5553,48 @@ export default function App() {
                             return (
                               <tr
                                 key={p.id}
-                                className={`hover:bg-[#152a20] transition ${
-                                  p.isFinished
-                                    ? 'bg-amber-950/30 font-semibold'
-                                    : isTop1
-                                    ? 'bg-yellow-950/20'
-                                    : ''
+                                className={`hover:bg-neutral-800/40 transition ${
+                                  p.isFinished ? 'bg-neutral-800/20' : ''
                                 }`}
                               >
-                                <td className="py-2.5 px-3 text-center">
-                                  {isTop1 ? (
-                                    <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-gradient-to-r from-amber-400 to-yellow-300 text-stone-950 font-black shadow">
-                                      🥇
-                                    </span>
-                                  ) : isTop2 ? (
-                                    <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-gradient-to-r from-slate-300 to-slate-100 text-stone-950 font-black shadow">
-                                      🥈
-                                    </span>
-                                  ) : isTop3 ? (
-                                    <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-gradient-to-r from-amber-700 to-amber-600 text-white font-black shadow">
-                                      🥉
-                                    </span>
-                                  ) : (
-                                    <span className="font-mono text-amber-200/90 font-black text-sm">#{rank}</span>
-                                  )}
+                                <td className="py-3 px-4 font-mono font-bold text-neutral-200">
+                                  #{String(rank).padStart(2, '0')}
                                 </td>
-                                <td className="py-2.5 px-3">
-                                  <div className="flex items-center space-x-2">
-                                    <span
-                                      className={`w-2 h-2 rounded-full shrink-0 ${
-                                        p.isOnline ? 'bg-emerald-400' : 'bg-stone-600'
-                                      }`}
-                                    />
-                                    <span className={`font-bold text-sm ${isTop1 ? 'text-amber-300' : 'text-stone-100'}`}>
-                                      {p.name}
-                                    </span>
-                                  </div>
+                                <td className="py-3 px-4 font-medium text-neutral-100">
+                                  {p.name}
                                 </td>
-                                <td className="py-2.5 px-3">
-                                  <span className="inline-block bg-[#142820] border border-[#26483a] text-amber-200 px-2 py-0.5 rounded-lg text-[11px] font-semibold">
-                                    Chiến khu {stepNum}/6: {p.currentMapName}
-                                  </span>
+                                <td className="py-3 px-4 text-neutral-300">
+                                  Màn {stepNum}/6 — {p.currentMapName}
                                 </td>
-                                <td className="py-2.5 px-3">
-                                  <div className="flex items-center space-x-2">
-                                    <div className="flex-1 h-2.5 bg-[#14261f] rounded-full overflow-hidden border border-[#28483b]">
+                                <td className="py-3 px-4">
+                                  <div className="flex items-center space-x-2.5">
+                                    <div className="flex-1 h-1.5 bg-neutral-800 rounded-full overflow-hidden">
                                       <div
-                                        className={`h-full transition-all duration-500 ${
-                                          p.isFinished
-                                            ? 'bg-gradient-to-r from-amber-400 to-yellow-300'
-                                            : 'bg-gradient-to-r from-emerald-500 to-amber-400'
+                                        className={`h-full transition-all duration-300 ${
+                                          p.isFinished ? 'bg-emerald-500' : 'bg-amber-500'
                                         }`}
                                         style={{ width: `${progressPct}%` }}
                                       />
                                     </div>
-                                    <span className="font-mono text-[11px] text-amber-300 font-bold shrink-0">
+                                    <span className="font-mono text-neutral-400 w-9 text-right">
                                       {p.solvedCount}/{p.totalPieces || 8}
                                     </span>
                                   </div>
                                 </td>
-                                <td className="py-2.5 px-3 text-center font-mono font-bold text-emerald-400">
+                                <td className="py-3 px-4 text-right font-mono text-neutral-200">
                                   {formatRaceTime(p.finishTimeMs || (p.isFinished ? null : raceElapsedSeconds))}
                                 </td>
-                                <td className="py-2.5 px-3 text-right">
+                                <td className="py-3 px-4 text-right">
                                   {p.isFinished ? (
-                                    <span className="inline-block bg-gradient-to-r from-amber-500 to-yellow-400 text-stone-950 font-black text-[11px] px-2.5 py-0.5 rounded-full shadow">
-                                      🏆 VỀ ĐÍCH (#{rank})
+                                    <span className="text-emerald-400 font-medium">
+                                      Hoàn thành
                                     </span>
                                   ) : p.isOnline ? (
-                                    <span className="text-emerald-400 text-xs font-bold">
-                                      ⚡ Đang đua
+                                    <span className="text-amber-400">
+                                      Đang làm bài
                                     </span>
                                   ) : (
-                                    <span className="text-stone-500 text-xs">
+                                    <span className="text-neutral-500">
                                       Mất kết nối
                                     </span>
                                   )}
@@ -5719,8 +5605,8 @@ export default function App() {
 
                           {allPlayers.length === 0 && (
                             <tr>
-                              <td colSpan={6} className="text-center py-10 text-stone-400">
-                                Chưa có thí sinh nào trong phòng. Hãy bấm tab <b>"1. Mã QR & Sảnh Chờ"</b> để học sinh quét mã tham gia!
+                              <td colSpan={6} className="py-12 text-center text-neutral-500">
+                                Chưa có người chơi nào trong danh sách.
                               </td>
                             </tr>
                           )}
@@ -6001,59 +5887,52 @@ export default function App() {
       )}
 
       {/* ===================================================================
-          12B. MODAL ĐĂNG NHẬP TÀI KHOẢN ADMIN HOST (TK: admin / MK: trienngu)
+          12B. ĐĂNG NHẬP QUẢN TRỊ VIÊN (TK: admin / MK: trienngu)
       =================================================================== */}
       {showAdminLoginModal && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
           <form
             onSubmit={handleAdminLoginSubmit}
-            className="bg-gradient-to-b from-[#240a0a] to-[#121e19] border-2 border-amber-400/80 rounded-3xl max-w-sm w-full p-6 shadow-2xl relative text-stone-100"
+            className="bg-[#16191d] border border-neutral-700 rounded-lg max-w-sm w-full p-6 shadow-xl relative text-neutral-100"
           >
-            <button
-              type="button"
-              onClick={() => setShowAdminLoginModal(false)}
-              className="absolute top-4 right-4 text-stone-400 hover:text-white p-1 bg-black/40 rounded-lg"
-            >
-              ✕
-            </button>
-
-            <div className="text-center mb-4">
-              <div className="w-12 h-12 mx-auto mb-2 rounded-2xl bg-amber-500/20 border border-amber-400 flex items-center justify-center text-2xl">
-                👑
-              </div>
-              <h3 className="text-base font-black text-amber-300 uppercase tracking-wide">
-                ĐĂNG NHẬP HOST QUẢN TRỊ
+            <div className="flex items-center justify-between border-b border-neutral-800 pb-3 mb-4">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-neutral-100">
+                Đăng nhập Quản trị
               </h3>
-              <p className="text-[11px] text-stone-400 mt-0.5">
-                Dành riêng cho Ban Tổ Chức điều hành phòng đua 60 người
-              </p>
+              <button
+                type="button"
+                onClick={() => setShowAdminLoginModal(false)}
+                className="text-neutral-400 hover:text-white text-sm"
+              >
+                ✕
+              </button>
             </div>
 
             <div className="space-y-3 text-left text-xs">
               <div>
-                <label className="font-bold text-amber-200 block mb-1">Tài khoản Admin:</label>
+                <label className="text-neutral-300 block mb-1">Tài khoản</label>
                 <input
                   type="text"
                   autoFocus
                   value={adminUserInp}
                   onChange={(e) => setAdminUserInp(e.target.value)}
-                  placeholder="Nhập tài khoản..."
-                  className="w-full bg-[#0d1713] border border-amber-500/40 text-stone-100 px-3 py-2 rounded-xl focus:outline-none focus:border-amber-400 font-semibold"
+                  placeholder="admin"
+                  className="w-full bg-[#111315] border border-neutral-700 text-neutral-100 px-3 py-2 rounded focus:outline-none focus:border-neutral-500"
                 />
               </div>
               <div>
-                <label className="font-bold text-amber-200 block mb-1">Mật khẩu:</label>
+                <label className="text-neutral-300 block mb-1">Mật khẩu</label>
                 <input
                   type="password"
                   value={adminPassInp}
                   onChange={(e) => setAdminPassInp(e.target.value)}
-                  placeholder="Nhập mật khẩu..."
-                  className="w-full bg-[#0d1713] border border-amber-500/40 text-stone-100 px-3 py-2 rounded-xl focus:outline-none focus:border-amber-400 font-semibold"
+                  placeholder="••••••••"
+                  className="w-full bg-[#111315] border border-neutral-700 text-neutral-100 px-3 py-2 rounded focus:outline-none focus:border-neutral-500"
                 />
               </div>
 
               {adminLoginError && (
-                <div className="p-2.5 bg-red-950/90 border border-red-500 rounded-xl text-red-200 text-[11px] font-bold text-center">
+                <div className="p-2 bg-red-950/60 border border-red-800 rounded text-red-300 text-xs">
                   {adminLoginError}
                 </div>
               )}
@@ -6061,9 +5940,9 @@ export default function App() {
 
             <button
               type="submit"
-              className="mt-5 w-full py-2.5 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-stone-950 font-black rounded-xl text-xs uppercase tracking-wider shadow-lg transition active:scale-95"
+              className="mt-5 w-full py-2 bg-neutral-200 hover:bg-white text-neutral-950 font-semibold rounded text-xs transition"
             >
-              ĐĂNG NHẬP & MỞ BẢNG HOST
+              Đăng nhập
             </button>
           </form>
         </div>
