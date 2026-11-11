@@ -2410,7 +2410,7 @@ export default function App() {
     } catch {}
   }, [roomCode]);
 
-  // Tự động lưu tiến trình chơi vào localStorage mỗi khi có thay đổi (chống mất dữ liệu khi disconnect / F5)
+  // Tự động lưu tiến trình chơi vào localStorage khi có thay đổi quan trọng (KHÔNG chạy liên tục mỗi bước chân để tránh giật/lag)
   useEffect(() => {
     try {
       const progressData = {
@@ -2432,7 +2432,6 @@ export default function App() {
   }, [
     roomCode,
     currentMapId,
-    playerDisplayPos,
     solvedIds,
     collectedItems,
     collectedDirectives,
@@ -2442,7 +2441,28 @@ export default function App() {
     finishTimeMsRecord
   ]);
 
+  // Lưu tọa độ định kỳ mỗi 4 giây và khi đóng/tải lại trang (Zero-lag khi di chuyển)
+  useEffect(() => {
+    const savePosPeriodically = () => {
+      try {
+        const raw = localStorage.getItem('cddl_saved_progress_v1');
+        const parsed = raw ? JSON.parse(raw) : {};
+        parsed.playerPos = posRef.current;
+        parsed.updatedAt = Date.now();
+        localStorage.setItem('cddl_saved_progress_v1', JSON.stringify(parsed));
+      } catch {}
+    };
+    const timer = setInterval(savePosPeriodically, 4000);
+    window.addEventListener('beforeunload', savePosPeriodically);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('beforeunload', savePosPeriodically);
+    };
+  }, []);
+
   const canvasRef = useRef(null);
+  const canvasSizeRef = useRef({ width: 1024, height: 640 });
+  const offscreenMapRef = useRef({ mapId: null, assetsReady: false, canvas: null });
   const imagesRef = useRef({});
   const [assetsLoaded, setAssetsLoaded] = useState(false);
 
@@ -3353,8 +3373,28 @@ export default function App() {
   };
 
   // =========================================================================
-  // 5. VÒNG LẶP GAME ENGINE & VẼ CANVAS CHUẨN PIXEL TRUYTIMDANCHU.SITE
+  // 5. VÒNG LẶP GAME ENGINE & VẼ CANVAS SIÊU MƯỢT (OFFSCREEN MAP CACHE + ZERO SHADOWBLUR)
   // =========================================================================
+  // Cập nhật kích thước Canvas khi resize hoặc đổi chế độ màn hình (Không đọc DOM layout trong mỗi frame 60fps)
+  useEffect(() => {
+    const updateSize = () => {
+      const c = canvasRef.current;
+      if (c) {
+        canvasSizeRef.current = {
+          width: c.clientWidth || 1024,
+          height: c.clientHeight || 640
+        };
+      }
+    };
+    updateSize();
+    const timer = setTimeout(updateSize, 320);
+    window.addEventListener('resize', updateSize);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', updateSize);
+    };
+  }, [isExpandedScreen]);
+
   useEffect(() => {
     let animationId;
     let syncUiCounter = 0;
@@ -3366,12 +3406,12 @@ export default function App() {
 
         const canvas = canvasRef.current;
         if (!canvas) return;
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d', { alpha: false });
         const imgs = imagesRef.current;
         let anyAgentNear = false;
 
       // 1. CẬP NHẬT VỊ TRÍ NGƯỜI CHƠI (TỐC ĐỘ THONG THẢ 2.6 TILES/S)
-      if (gameStatus === 'PLAYING' && backendConnected === 'ONLINE' && !activeNpc && !mapTransitionText && !capturedModalRef.current) {
+      if (gameStatus === 'PLAYING' && !activeNpc && !mapTransitionText && !capturedModalRef.current) {
         let vx = 0;
         let vy = 0;
 
@@ -3456,7 +3496,6 @@ export default function App() {
               }
 
               // TỐC ĐỘ TĂNG ĐIỂM BỊ PHÁT HIỆN: TĂNG RẤT NHANH KHI BƯỚC VÀO VÒNG MẬT THÁM
-              // Càng đứng gần mật thám thì điểm vọt lên càng nhanh (35% -> 55% -> 85%/giây)
               const rate = distToPlayer <= 0.9 ? 85 : (distToPlayer <= 1.4 ? 55 : 35);
               threatLevelRef.current = Math.min(100, threatLevelRef.current + rate * dt);
               if (threatLevelRef.current >= 100 && !capturedModalRef.current) {
@@ -3520,20 +3559,19 @@ export default function App() {
           }
         }
 
-        // ĐỒNG BỘ UI THÔNG MINH (CHỈ RE-RENDER KHI CÓ THAY ĐỔI THỰC SỰ - TRÁNH ĐƠ/LAG)
+        // ĐỒNG BỘ UI THÔNG MINH (CHỈ RE-RENDER KHI CÓ THAY ĐỔI LỚN - TRÁNH GIẬT LAG TRÊN VERCEL)
         syncUiCounter++;
-        if (syncUiCounter % 6 === 0) {
+        if (syncUiCounter % 10 === 0) {
           const currentIntThreat = Math.round(threatLevelRef.current);
-          setThreatLevel((prev) => (prev !== currentIntThreat ? currentIntThreat : prev));
+          setThreatLevel((prev) => (Math.abs(prev - currentIntThreat) >= 2 || (currentIntThreat === 0 && prev !== 0) ? currentIntThreat : prev));
           setIsPatrolAlerting((prev) => (prev !== anyAgentNear ? anyAgentNear : prev));
 
           const dPos = Math.hypot(
             posRef.current.x - lastDisplayPosRef.current.x,
             posRef.current.y - lastDisplayPosRef.current.y
           );
-          // Chỉ cập nhật React state khi di chuyển >= 0.42 ô hoặc khi vừa dừng lại để giảm 80% re-render
           const isMovingNow = vx !== 0 || vy !== 0;
-          if (dPos >= 0.42 || (!isMovingNow && dPos >= 0.08)) {
+          if (dPos >= 0.75 || (!isMovingNow && dPos >= 0.1)) {
             lastDisplayPosRef.current = { x: posRef.current.x, y: posRef.current.y };
             setPlayerDisplayPos({ x: posRef.current.x, y: posRef.current.y });
           }
@@ -3541,27 +3579,21 @@ export default function App() {
       }
 
       // ===================================================================
-      // 4. CANVAS RENDERING SIÊU MƯỢT 60FPS (CACHED DIMENSION + DPR 1.5)
+      // 4. CANVAS RENDERING SIÊU MƯỢT 60FPS (OFFSCREEN MAP CACHE + 1x PIXEL ART)
       // ===================================================================
-      const cw = canvas.clientWidth || 1024;
-      const ch = canvas.clientHeight || 640;
+      const cw = canvasSizeRef.current.width || 1024;
+      const ch = canvasSizeRef.current.height || 640;
       const rect = { width: cw, height: ch };
-      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-      const targetW = Math.round(cw * dpr);
-      const targetH = Math.round(ch * dpr);
 
-      if (canvas.width !== targetW || canvas.height !== targetH) {
-        canvas.width = targetW;
-        canvas.height = targetH;
+      if (canvas.width !== cw || canvas.height !== ch) {
+        canvas.width = cw;
+        canvas.height = ch;
       }
 
       ctx.save();
-      ctx.scale(dpr * zoomLevel, dpr * zoomLevel);
+      ctx.scale(zoomLevel, zoomLevel);
       ctx.imageSmoothingEnabled = false;
 
-      ctx.clearRect(0, 0, rect.width / zoomLevel, rect.height / zoomLevel);
-
-      // Camera bám theo Quang với zoomLevel
       const viewWidth = rect.width / zoomLevel;
       const viewHeight = rect.height / zoomLevel;
       const curX = posRef.current.x;
@@ -3572,90 +3604,99 @@ export default function App() {
       ctx.save();
       ctx.translate(Math.round(-camX), Math.round(-camY));
 
-      // A. Vẽ Map Tiles
-      for (let y = 0; y < MAP_HEIGHT; y++) {
-        for (let x = 0; x < MAP_WIDTH; x++) {
-          const tile = mapData[y][x];
-          const px = x * TILE_SIZE;
-          const py = y * TILE_SIZE;
+      // A + B + C + F: VẼ NỀN MAP TĨNH TỪ OFFSCREEN CANVAS (Chỉ 1 lệnh drawImage thay vì 720 lệnh/frame!)
+      if (
+        !offscreenMapRef.current.canvas ||
+        offscreenMapRef.current.mapId !== currentMapId ||
+        offscreenMapRef.current.assetsReady !== assetsLoaded
+      ) {
+        const offCanvas = offscreenMapRef.current.canvas || document.createElement('canvas');
+        offCanvas.width = MAP_WIDTH * TILE_SIZE;
+        offCanvas.height = MAP_HEIGHT * TILE_SIZE;
+        const octx = offCanvas.getContext('2d', { alpha: false });
+        octx.imageSmoothingEnabled = false;
 
-          let tileImg = imgs.tileGrass;
-          if (tile === TILES.GRASS_PLAZA) tileImg = imgs.tileGrassPlaza || imgs.tileGrass;
-          else if (tile === TILES.PATH) tileImg = imgs.tilePath;
-          else if (tile === TILES.MUSEUM_FLOOR) tileImg = imgs.tileCity;
-          else if (tile === TILES.FOREST) tileImg = imgs.tileForest;
-          else if (tile === TILES.WATER) tileImg = imgs.tileWater;
-          else if (tile === TILES.ROCKY) tileImg = imgs.tileRocky;
+        for (let y = 0; y < MAP_HEIGHT; y++) {
+          for (let x = 0; x < MAP_WIDTH; x++) {
+            const tile = mapData[y][x];
+            const tpx = x * TILE_SIZE;
+            const tpy = y * TILE_SIZE;
 
-          if (tileImg && tileImg.complete && tileImg.naturalWidth > 0) {
-            ctx.drawImage(tileImg, px, py, TILE_SIZE, TILE_SIZE);
-          } else {
-            ctx.fillStyle = tile === TILES.PATH ? '#dec9a3' : (tile === TILES.GRASS_PLAZA ? '#3c6b44' : '#4e825b');
-            ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+            let tileImg = imgs.tileGrass;
+            if (tile === TILES.GRASS_PLAZA) tileImg = imgs.tileGrassPlaza || imgs.tileGrass;
+            else if (tile === TILES.PATH) tileImg = imgs.tilePath;
+            else if (tile === TILES.MUSEUM_FLOOR) tileImg = imgs.tileCity;
+            else if (tile === TILES.FOREST) tileImg = imgs.tileForest;
+            else if (tile === TILES.WATER) tileImg = imgs.tileWater;
+            else if (tile === TILES.ROCKY) tileImg = imgs.tileRocky;
+
+            if (tileImg && tileImg.complete && tileImg.naturalWidth > 0) {
+              octx.drawImage(tileImg, tpx, tpy, TILE_SIZE, TILE_SIZE);
+            } else {
+              octx.fillStyle = tile === TILES.PATH ? '#dec9a3' : (tile === TILES.GRASS_PLAZA ? '#3c6b44' : '#4e825b');
+              octx.fillRect(tpx, tpy, TILE_SIZE, TILE_SIZE);
+            }
           }
         }
+
+        if (currentMap.courtyardBorder) {
+          const cb = currentMap.courtyardBorder;
+          const bx = cb.x * TILE_SIZE;
+          const by = cb.y * TILE_SIZE;
+          const bw = cb.w * TILE_SIZE;
+          const bh = cb.h * TILE_SIZE;
+
+          octx.strokeStyle = '#d4b079';
+          octx.lineWidth = 10;
+          octx.strokeRect(bx, by, bw, bh);
+
+          octx.strokeStyle = '#f2d6a5';
+          octx.lineWidth = 2;
+          octx.strokeRect(bx + 4, by + 4, bw - 8, bh - 8);
+
+          octx.strokeStyle = '#9c7743';
+          octx.lineWidth = 2;
+          octx.strokeRect(bx - 5, by - 5, bw + 10, bh + 10);
+        }
+
+        if (currentMap.groundLabel1) {
+          octx.save();
+          octx.font = '900 20px monospace, sans-serif';
+          octx.fillStyle = 'rgba(255, 255, 245, 0.42)';
+          octx.textAlign = 'center';
+          octx.fillText(currentMap.groundLabel1, 10 * TILE_SIZE, 6 * TILE_SIZE + 24);
+          octx.restore();
+        }
+
+        if (currentMap.groundLabel2) {
+          octx.save();
+          octx.font = '900 18px monospace, sans-serif';
+          octx.fillStyle = 'rgba(255, 255, 245, 0.45)';
+          octx.textAlign = 'center';
+          octx.fillText(currentMap.groundLabel2, 22 * TILE_SIZE, 11 * TILE_SIZE + 10);
+          octx.restore();
+        }
+
+        if (currentMap.props) {
+          currentMap.props.forEach((p) => {
+            const pImg = imgs[p.key];
+            if (pImg && pImg.complete && pImg.naturalWidth > 0) {
+              octx.drawImage(pImg, p.x * TILE_SIZE, p.y * TILE_SIZE, p.w, p.h);
+            }
+          });
+        }
+
+        offscreenMapRef.current = {
+          mapId: currentMapId,
+          assetsReady: assetsLoaded,
+          canvas: offCanvas
+        };
       }
 
-      // B. Vẽ Khung Viền Sandstone Viền Quanh Sân Cỏ Quảng Trường (Đặc trưng của ảnh mẫu)
-      if (currentMap.courtyardBorder) {
-        const cb = currentMap.courtyardBorder;
-        const bx = cb.x * TILE_SIZE;
-        const by = cb.y * TILE_SIZE;
-        const bw = cb.w * TILE_SIZE;
-        const bh = cb.h * TILE_SIZE;
+      // Chỉ 1 lệnh vẽ toàn bộ bản đồ nền + đạo cụ tĩnh
+      ctx.drawImage(offscreenMapRef.current.canvas, 0, 0);
 
-        // Sandstone Curb Top face
-        ctx.strokeStyle = '#d4b079';
-        ctx.lineWidth = 10;
-        ctx.strokeRect(bx, by, bw, bh);
-
-        // Highlight inner edge
-        ctx.strokeStyle = '#f2d6a5';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(bx + 4, by + 4, bw - 8, bh - 8);
-
-        // Shadow outer edge
-        ctx.strokeStyle = '#9c7743';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(bx - 5, by - 5, bw + 10, bh + 10);
-      }
-
-      // C. Vẽ Chữ In Nổi Trên Mặt Đất (Ground Labels - Điểm nhấn truytimdanchu.site)
-      if (currentMap.groundLabel1) {
-        ctx.save();
-        ctx.font = '900 20px monospace, sans-serif';
-        ctx.fillStyle = 'rgba(255, 255, 245, 0.42)';
-        ctx.textAlign = 'center';
-        // In ở giữa sân cỏ quảng trường
-        ctx.fillText(currentMap.groundLabel1, 10 * TILE_SIZE, 6 * TILE_SIZE + 24);
-        ctx.restore();
-      }
-
-      if (currentMap.groundLabel2) {
-        ctx.save();
-        ctx.font = '900 18px monospace, sans-serif';
-        ctx.fillStyle = 'rgba(255, 255, 245, 0.45)';
-        ctx.textAlign = 'center';
-        // In trên mặt đường cát nối dài
-        ctx.fillText(currentMap.groundLabel2, 22 * TILE_SIZE, 11 * TILE_SIZE + 10);
-        ctx.restore();
-      }
-
-      // D. Các đốm hoa / bụi sáng lấp lánh trên cỏ
-      const sparkleSeed = Math.floor(timestamp / 500);
-      const sparklePoints = [
-        { x: 19 * TILE_SIZE + 10, y: 7 * TILE_SIZE + 8 },
-        { x: 21 * TILE_SIZE + 24, y: 8 * TILE_SIZE + 16 },
-        { x: 18 * TILE_SIZE + 32, y: 16 * TILE_SIZE + 20 },
-        { x: 24 * TILE_SIZE + 14, y: 17 * TILE_SIZE + 12 }
-      ];
-      sparklePoints.forEach((sp, idx) => {
-        const alpha = 0.3 + 0.4 * Math.sin(timestamp * 0.004 + idx);
-        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
-        ctx.fillRect(sp.x, sp.y, 3, 3);
-      });
-
-      // E. Vẽ Cổng Dịch Chuyển (Portals)
+      // E. Vẽ Cổng Dịch Chuyển (Portals - Không dùng shadowBlur nặng GPU)
       currentMap.portals.forEach((portal) => {
         const pox = portal.x * TILE_SIZE;
         const poy = portal.y * TILE_SIZE;
@@ -3684,10 +3725,6 @@ export default function App() {
           ctx.fillText(`🔒 ${portal.label.replace('✦ ', '')} (CỔNG KHÓA)`, pox + 24, poy - 8);
         } else {
           ctx.save();
-          if (isLeadingForward && allQuestsDone) {
-            ctx.shadowColor = 'rgba(34, 197, 94, 0.9)';
-            ctx.shadowBlur = 16 * portalPulse;
-          }
           ctx.fillStyle = isLeadingForward && allQuestsDone
             ? `rgba(34, 197, 94, ${0.45 * portalPulse})`
             : `rgba(234, 179, 8, ${0.3 * portalPulse})`;
@@ -3707,16 +3744,6 @@ export default function App() {
         }
       });
 
-      // F. Vẽ Đạo Cụ Địa Hình Đặc Trưng của Map
-      if (currentMap.props) {
-        currentMap.props.forEach((p) => {
-          const pImg = imgs[p.key];
-          if (pImg && pImg.complete) {
-            ctx.drawImage(pImg, p.x * TILE_SIZE, p.y * TILE_SIZE, p.w, p.h);
-          }
-        });
-      }
-
       // F2. Vẽ Bàn Ghép Bảo Vật Lịch Sử (Crafting Station) của map này (nếu có)
       if (currentMapRecipe) {
         const sc = currentMapRecipe.stationCoord;
@@ -3728,8 +3755,6 @@ export default function App() {
         ctx.save();
         const craftPulse = 0.75 + 0.25 * Math.sin(timestamp * 0.007);
         if (isReady) {
-          ctx.shadowColor = 'rgba(250, 204, 21, 0.95)';
-          ctx.shadowBlur = 18 * craftPulse;
           ctx.strokeStyle = `rgba(250, 204, 21, ${0.9 * craftPulse})`;
           ctx.lineWidth = 2.5;
         } else if (isDone) {
@@ -3771,12 +3796,8 @@ export default function App() {
       if (currentMapId === 'MAP_BADINH') {
         const pdx = 15 * TILE_SIZE;
         const pdy = 5 * TILE_SIZE;
-        const pdPulse = 0.8 + 0.2 * Math.sin(timestamp * 0.006);
 
         ctx.save();
-        ctx.shadowColor = 'rgba(239, 68, 68, 0.9)';
-        ctx.shadowBlur = 16 * pdPulse;
-
         ctx.font = '900 11px sans-serif';
         const pdText = '⭐ ĐẠI LỄ ĐÀI TUYÊN NGÔN ĐỘC LẬP 2/9/1945 [E]';
         const pdW = Math.round(ctx.measureText(pdText).width + 20);
@@ -3804,17 +3825,13 @@ export default function App() {
         const itemBounce = Math.sin(timestamp * 0.008) * 6;
 
         ctx.save();
-        // Hào quang vàng rực rỡ lan tỏa
         const auraPulse = 0.75 + 0.25 * Math.sin(timestamp * 0.006);
-        ctx.shadowColor = 'rgba(250, 204, 21, 0.95)';
-        ctx.shadowBlur = 18 * auraPulse;
 
         ctx.fillStyle = `rgba(245, 158, 11, ${0.35 * auraPulse})`;
         ctx.beginPath();
         ctx.arc(itemX, itemY + 8, 24, 0, Math.PI * 2);
         ctx.fill();
 
-        // Biểu tượng huy chương / ngôi sao vàng 3D
         const iconY = itemY - 6 + itemBounce;
         ctx.fillStyle = '#f59e0b';
         ctx.beginPath();
@@ -3830,18 +3847,8 @@ export default function App() {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText('⭐', itemX, iconY);
-
-        // Hạt sáng lấp lánh xoay quanh
-        for (let i = 0; i < 4; i++) {
-          const spAngle = timestamp * 0.004 + (i * Math.PI) / 2;
-          const spX = itemX + Math.cos(spAngle) * 22;
-          const spY = iconY + Math.sin(spAngle) * 17;
-          ctx.fillStyle = '#fef08a';
-          ctx.fillRect(spX - 1.5, spY - 1.5, 3, 3);
-        }
         ctx.restore();
 
-        // Thẻ bài kỷ vật nổi bật
         const itemTag = `✦ ${activeDroppedItem.name}`;
         ctx.font = 'bold 11px sans-serif';
         const tagWidth = Math.round(ctx.measureText(itemTag).width + 18);
@@ -3871,15 +3878,12 @@ export default function App() {
           const distToPlayer = Math.hypot(patrol.x - curX, patrol.y - curY);
           const isDetecting = distToPlayer <= PATROL_DETECT_RADIUS;
 
-          // VÒNG TRÒN CẢNH BÁO ĐỎ CHUẨN XÁC 100% (ĐÃ THU NHỎ GỌN THEO YÊU CẦU)
           const pulse = 0.75 + 0.25 * Math.sin(timestamp * 0.009);
-          const visualRadius = PATROL_VISUAL_RADIUS * TILE_SIZE; // 2.2 * 48 = 105.6px
-          const innerCoreRadius = 1.0 * TILE_SIZE; // 48px
+          const visualRadius = PATROL_VISUAL_RADIUS * TILE_SIZE;
+          const innerCoreRadius = 1.0 * TILE_SIZE;
 
           ctx.save();
           if (isDetecting) {
-            ctx.shadowColor = 'rgba(239, 68, 68, 0.9)';
-            ctx.shadowBlur = 12 * pulse;
             ctx.strokeStyle = `rgba(239, 68, 68, ${0.9 * pulse})`;
             ctx.lineWidth = 2.5;
             ctx.fillStyle = `rgba(239, 68, 68, ${0.22 * pulse})`;
@@ -3889,13 +3893,11 @@ export default function App() {
             ctx.fillStyle = 'rgba(239, 68, 68, 0.06)';
           }
 
-          // Vẽ Vòng Tròn Ngoại Vi (Visual Detection Circle)
           ctx.beginPath();
           ctx.arc(centerX, centerY, visualRadius, 0, Math.PI * 2);
           ctx.fill();
           ctx.stroke();
 
-          // Vòng radar đồng tâm bên trong biểu thị vùng nguy cấp tử địa (< 1.0 ô)
           ctx.strokeStyle = isDetecting ? `rgba(255, 60, 60, ${0.7 * pulse})` : 'rgba(239, 68, 68, 0.25)';
           ctx.lineWidth = 1.2;
           ctx.setLineDash([4, 4]);
@@ -3905,21 +3907,17 @@ export default function App() {
           ctx.setLineDash([]);
           ctx.restore();
 
-          // Sprite Mật Thám Pháp (Áo trench coat xanh đen + Mũ phớt + Kính đen)
           const patImg = imgs.patrolAgent;
           if (patImg && patImg.complete) {
             ctx.drawImage(patImg, pax + 24 - CHAR_WIDTH / 2, pay + 44 - CHAR_HEIGHT, CHAR_WIDTH, CHAR_HEIGHT);
           }
 
-          // Dấu chấm than cảnh báo [!] CHỈ HIỆN KHI NGƯỜI CHƠI THỰC SỰ ĐỨNG TRONG VÒNG TRÒN
           if (isDetecting) {
             const alertBounce = Math.sin(timestamp * 0.015) * 4;
             const alX = pax + 24;
             const alY = pay - 54 + alertBounce;
 
             ctx.save();
-            ctx.shadowColor = 'rgba(239, 68, 68, 1)';
-            ctx.shadowBlur = 12;
             ctx.fillStyle = '#dc2626';
             ctx.beginPath();
             ctx.arc(alX, alY, 11, 0, Math.PI * 2);
@@ -3936,7 +3934,6 @@ export default function App() {
             ctx.restore();
           }
 
-          // Thẻ tên mật thám
           ctx.font = 'bold 10px sans-serif';
           ctx.fillStyle = isDetecting ? '#ef4444' : '#f87171';
           ctx.textAlign = 'center';
@@ -3961,10 +3958,6 @@ export default function App() {
           ctx.fillRect(nx + 4, ny - 10, 40, 54);
         }
 
-        // BẢNG TÊN CHIBI:
-        // - Mục tiêu chính (Target khi chưa có kỷ vật rơi): Viền bo màu vàng hổ phách, chữ đen đậm: [ ? Anh ]
-        // - Đã hoàn thành: Nền xanh lá [ ✓ Anh ]
-        // - NPC thông thường: Nền than xám đen mờ [ Bình ], [ Linh ]...
         const tagText = isCurrentActiveTarget ? `? ${npc.name}` : (isSolved ? `✓ ${npc.name}` : npc.name);
         ctx.font = 'bold 11.5px sans-serif';
         const textMetrics = ctx.measureText(tagText);
@@ -3974,7 +3967,6 @@ export default function App() {
         const tagY = ny - 36;
 
         if (isCurrentActiveTarget) {
-          // Thẻ bài vàng cam nổi bật của Mục tiêu kế tiếp [ ? Anh ]
           ctx.fillStyle = '#e5a855';
           ctx.beginPath();
           ctx.roundRect(tagX, tagY, tagWidth, tagH, 3.5);
@@ -3988,7 +3980,6 @@ export default function App() {
           ctx.textAlign = 'center';
           ctx.fillText(tagText, nx + 24, tagY + 13);
         } else {
-          // Thẻ bài tối giản thanh lịch như các bạn khác
           ctx.fillStyle = isSolved ? 'rgba(16, 40, 28, 0.94)' : 'rgba(18, 26, 28, 0.94)';
           ctx.beginPath();
           ctx.roundRect(tagX, tagY, tagWidth, tagH, 3.5);
@@ -4003,32 +3994,23 @@ export default function App() {
           ctx.fillText(tagText, nx + 24, tagY + 13);
         }
 
-        // DẤU [ ? ] TRÊN ĐẦU NPC CÓ NHIỆM VỤ MÀ NHÂN VẬT CẦN GẶP:
-        // CHỈ HIỂN THỊ DUY NHẤT TRÊN ĐẦU NPC MỤC TIÊU HIỆN TẠI VÀ CHƯA CÓ KỶ VẬT RƠI!
         if (isCurrentActiveTarget && !isSolved) {
           const bounce = Math.sin(timestamp * 0.007) * 4.5;
           const qX = nx + 24;
           const qY = ny - 56 + bounce;
 
           ctx.save();
-          ctx.shadowColor = 'rgba(250, 204, 21, 0.95)';
-          ctx.shadowBlur = 14;
-
           const qRadius = 13;
           ctx.beginPath();
           ctx.arc(qX, qY, qRadius, 0, Math.PI * 2);
 
-          const grad = ctx.createLinearGradient(qX, qY - qRadius, qX, qY + qRadius);
-          grad.addColorStop(0, '#fef08a');
-          grad.addColorStop(1, '#f59e0b');
-          ctx.fillStyle = grad;
+          ctx.fillStyle = '#f59e0b';
           ctx.fill();
 
           ctx.strokeStyle = '#78350f';
           ctx.lineWidth = 2;
           ctx.stroke();
 
-          // Mũi nhọn tam giác trỏ xuống đầu nhân vật
           ctx.beginPath();
           ctx.moveTo(qX - 4, qY + qRadius - 1);
           ctx.lineTo(qX, qY + qRadius + 5);
@@ -4040,7 +4022,6 @@ export default function App() {
           ctx.lineWidth = 1.8;
           ctx.stroke();
 
-          // Ký tự dấu ? đậm nét ở chính giữa
           ctx.font = '900 15px sans-serif';
           ctx.fillStyle = '#1c1917';
           ctx.textAlign = 'center';
@@ -4059,18 +4040,15 @@ export default function App() {
       let distText = '';
 
       if (activeDroppedItem && activeDroppedItem.mapId === currentMapId) {
-        // 1. ƯU TIÊN SỐ 1: HƯỚNG TỚI KỶ VẬT ĐANG RƠI TRÊN BẢN ĐỒ!
         angle = Math.atan2(activeDroppedItem.y * TILE_SIZE - py, activeDroppedItem.x * TILE_SIZE - px);
         const itemDist = Math.max(1, Math.round(Math.hypot(activeDroppedItem.x - curX, activeDroppedItem.y - curY) * 2));
         distText = `✦ Tìm: ${activeDroppedItem.name} · ${itemDist}m`;
       } else if (readyCraftRecipe && readyCraftRecipe.targetMapId === currentMapId) {
-        // 2. ƯU TIÊN SỐ 2: ĐÃ ĐỦ NGUYÊN LIỆU ĐANG Ở CÙNG MAP -> HƯỚNG VỀ BÀN GHÉP BẢO VẬT!
         const sc = readyCraftRecipe.stationCoord;
         angle = Math.atan2(sc.y * TILE_SIZE - py, sc.x * TILE_SIZE - px);
         const craftDist = Math.max(1, Math.round(Math.hypot(sc.x - curX, sc.y - curY) * 2));
         distText = `✦ Ghép: ${readyCraftRecipe.name.substring(0, 18)}... · ${craftDist}m`;
       } else if (readyCraftRecipe && readyCraftRecipe.targetMapId !== currentMapId) {
-        // 3. ĐÃ ĐỦ NGUYÊN LIỆU NHƯNG TRẠM GHÉP Ở MAP TRƯỚC -> HƯỚNG TỚI CỔNG QUAY VỀ
         const backPortal = currentMap.portals.find((p) => {
           const targetDef = MAP_DEFINITIONS[p.targetMapId];
           const curDef = MAP_DEFINITIONS[currentMapId];
@@ -4083,22 +4061,18 @@ export default function App() {
           distText = `Quay về ${readyCraftRecipe.stationName.substring(0, 16)}... · ${pDist}m`;
         }
       } else if (currentMapId === 'MAP_BADINH' && !solvedIds.includes('NPC_BAC_HO_BADINH')) {
-        // 4. TẠI BA ĐÌNH: HƯỚNG TỚI LỄ ĐÀI & BÁC HỒ
         angle = Math.atan2(6 * TILE_SIZE - py, 15 * TILE_SIZE - px);
         const badinhDist = Math.max(1, Math.round(Math.hypot(15 - curX, 6 - curY) * 2));
         distText = `Lễ Đài Ba Đình · ${badinhDist}m`;
       } else if (!isCurMapAllNpcsSolved && nextUnsolvedNpcInMap) {
-        // 5. HƯỚNG TỚI NPC MỤC TIÊU TIẾP THEO TRONG MAP HIỆN TẠI
         angle = Math.atan2(nextUnsolvedNpcInMap.y * TILE_SIZE - py, nextUnsolvedNpcInMap.x * TILE_SIZE - px);
         const targetDist = Math.max(1, Math.round(Math.hypot(nextUnsolvedNpcInMap.x - curX, nextUnsolvedNpcInMap.y - curY)));
         distText = `Gặp ${nextUnsolvedNpcInMap.name} · ${targetDist}m`;
       } else if (forwardNextPortal) {
-        // 6. ĐÃ HOÀN THÀNH TOÀN BỘ NHIỆM VỤ MAP HIỆN TẠI -> HƯỚNG THẲNG TỚI CỔNG MAP MỚI!
         angle = Math.atan2(forwardNextPortal.y * TILE_SIZE - py, forwardNextPortal.x * TILE_SIZE - px);
         const pDist = Math.max(1, Math.round(Math.hypot(forwardNextPortal.x - curX, forwardNextPortal.y - curY) * 2));
         distText = `✦ Cổng ${forwardNextPortal.label.replace('✦ ', '')} · ${pDist}m`;
       } else {
-        // 7. DỰ PHÒNG CỔNG MẶC ĐỊNH
         const portal = currentMap.portals[0];
         if (portal) {
           angle = Math.atan2(portal.y * TILE_SIZE - py, portal.x * TILE_SIZE - px);
@@ -4107,30 +4081,21 @@ export default function App() {
         }
       }
 
-      // 1. MŨI TÊN CHỈ ĐƯỜNG VÀNG KIM SIÊU TO & ĐẬM NÉT (XOAY THEO HƯỚNG MỤC TIÊU)
-      const arrowPulse = 0.85 + 0.15 * Math.sin(timestamp * 0.008);
+      // 1. MŨI TÊN CHỈ ĐƯỜNG VÀNG KIM (KHÔNG DÙNG SHADOWBLUR)
       ctx.save();
-      // Đặt gốc toạ độ xoay tại điểm chân người chơi
       ctx.translate(px + 24, py + 48);
       ctx.rotate(angle);
 
-      // Hào quang vàng rực rỡ chỉ đường
-      ctx.shadowColor = 'rgba(250, 204, 21, 1)';
-      ctx.shadowBlur = 14 * arrowPulse;
-
-      // Thân Mũi Tên Chỉ Đường 3D TO RÕ (Dài 36px, rộng 26px, chevron dày dặn)
       ctx.beginPath();
-      ctx.moveTo(36, 0);       // Đỉnh nhọn chỉ thẳng mục tiêu
-      ctx.lineTo(8, -13);      // Cánh trên
-      ctx.lineTo(15, 0);       // Góc thụt đuôi
-      ctx.lineTo(8, 13);       // Cánh dưới
+      ctx.moveTo(36, 0);
+      ctx.lineTo(8, -13);
+      ctx.lineTo(15, 0);
+      ctx.lineTo(8, 13);
       ctx.closePath();
 
-      // Nửa trên vàng tươi sáng #fef08a
       ctx.fillStyle = '#fef08a';
       ctx.fill();
 
-      // Nửa dưới vàng hổ phách #d97706 tạo khối 3D nổi bật
       ctx.beginPath();
       ctx.moveTo(36, 0);
       ctx.lineTo(15, 0);
@@ -4139,12 +4104,10 @@ export default function App() {
       ctx.fillStyle = '#d97706';
       ctx.fill();
 
-      // Viền sắc sảo màu nâu sẫm đậm nét
       ctx.strokeStyle = '#78350f';
       ctx.lineWidth = 2.2;
       ctx.stroke();
 
-      // Vạch chevron nhấp nháy dẫn hướng phía trước mũi tên (ở khoảng cách 44px - 52px)
       const pulseLead = 44 + 5 * Math.sin(timestamp * 0.009);
       ctx.strokeStyle = `rgba(253, 224, 71, ${0.45 + 0.5 * Math.sin(timestamp * 0.009)})`;
       ctx.lineWidth = 3;
@@ -4155,7 +4118,7 @@ export default function App() {
       ctx.lineTo(pulseLead, 6);
       ctx.stroke();
 
-      ctx.restore(); // Kết thúc vẽ mũi tên
+      ctx.restore();
 
       // 2. VẼ SPRITE QUANG (TO RÕ 58x76, ĐỨNG VỮNG TRÊN NỀN ĐẤT)
       const curDir = dirRef.current;
