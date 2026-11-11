@@ -121,7 +121,7 @@ const MAP_HEIGHT = 24;
 
 // BÁN KÍNH VÒNG TRÒN CẢNH BÁO MẬT THÁM PHÁP (ĐÃ ĐƯỢC THU NHỎ GỌN GÀNG THEO YÊU CẦU)
 const PATROL_VISUAL_RADIUS = 2.2; // Bán kính vòng tròn đỏ vẽ trên map = 2.2 ô (105.6px)
-const PATROL_DETECT_RADIUS = 2.0; // Bán kính kích hoạt phát hiện = 2.0 ô (96.0px, có biên an toàn 0.2 ô cho người chơi)
+const PATROL_DETECT_RADIUS = 2.2; // Kích hoạt ngay khi chạm vào vòng tròn đỏ 2.2 ô
 
 // Kích thước hiển thị nhân vật to rõ (HD Chibi scaling)
 const CHAR_WIDTH = 58;
@@ -3533,33 +3533,34 @@ export default function App() {
             const dy = p.y - posRef.current.y;
             const distToPlayer = Math.hypot(dx, dy);
 
-            // BÁN KÍNH PHÁT HIỆN: 2.0 ô kích hoạt (Vòng vẽ 2.2 ô)
+            // BÁN KÍNH PHÁT HIỆN: 2.2 ô (tăng nhanh ngay khi chạm vào vòng tròn cảnh báo của mật thám Pháp)
             if (distToPlayer <= PATROL_DETECT_RADIUS) {
               anyAgentNear = true;
               alertAudioTimerRef.current += dt;
-              if (alertAudioTimerRef.current >= 0.32) {
+              if (alertAudioTimerRef.current >= 0.24) {
                 alertAudioTimerRef.current = 0;
                 SoundEngine.alert();
               }
 
-              // TỐC ĐỘ TĂNG ĐIỂM BỊ PHÁT HIỆN: TĂNG RẤT NHANH KHI BƯỚC VÀO VÒNG MẬT THÁM
-              const rate = distToPlayer <= 0.9 ? 85 : (distToPlayer <= 1.4 ? 55 : 35);
+              // TỐC ĐỘ TĂNG ĐIỂM BỊ PHÁT HIỆN: TĂNG NHANH DỨT KHOÁT KHI GẶP MẬT THÁM PHÁP
+              const rate = distToPlayer <= 1.0 ? 150 : (distToPlayer <= 1.6 ? 110 : 75);
               threatLevelRef.current = Math.min(100, threatLevelRef.current + rate * dt);
               if (threatLevelRef.current >= 100 && !capturedModalRef.current) {
                 capturedModalRef.current = true;
+                setThreatLevel(100);
                 setTimeout(() => {
                   SoundEngine.alert();
                   SoundEngine.wrong();
                   setCapturedModal(true);
-                }, 120);
+                }, 80);
               }
             }
           });
 
-          // KHI ĐỨNG NGOÀI VÒNG TRÒN: NGỪNG BÁO ĐỘNG & HẠ NHIỆT RẤT CHẬM (3.2%/giây)
+          // KHI ĐỨNG NGOÀI VÒNG TRÒN: NGỪNG BÁO ĐỘNG & HẠ NHIỆT CHẬM (2.5%/giây)
           if (!anyAgentNear && threatLevelRef.current > 0) {
             alertAudioTimerRef.current = 0;
-            threatLevelRef.current = Math.max(0, threatLevelRef.current - 3.2 * dt);
+            threatLevelRef.current = Math.max(0, threatLevelRef.current - 2.5 * dt);
           }
         }
 
@@ -3606,11 +3607,11 @@ export default function App() {
           }
         }
 
-        // ĐỒNG BỘ UI THÔNG MINH (CHỈ RE-RENDER KHI CÓ THAY ĐỔI LỚN - TRÁNH GIẬT LAG TRÊN VERCEL)
+        // ĐỒNG BỘ UI THÔNG MINH (CẬP NHẬT TỨC THÌ KHI GẶP MẬT THÁM, TỐI ƯU KHI ĐI BỘ)
         syncUiCounter++;
-        if (syncUiCounter % 10 === 0) {
+        if (anyAgentNear ? syncUiCounter % 3 === 0 : syncUiCounter % 10 === 0) {
           const currentIntThreat = Math.round(threatLevelRef.current);
-          setThreatLevel((prev) => (Math.abs(prev - currentIntThreat) >= 2 || (currentIntThreat === 0 && prev !== 0) ? currentIntThreat : prev));
+          setThreatLevel((prev) => (Math.abs(prev - currentIntThreat) >= 1 || (currentIntThreat === 0 && prev !== 0) ? currentIntThreat : prev));
           setIsPatrolAlerting((prev) => (prev !== anyAgentNear ? anyAgentNear : prev));
 
           const dPos = Math.hypot(
