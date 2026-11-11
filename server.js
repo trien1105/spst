@@ -129,10 +129,12 @@ function getSerializedRoom(room, forceRefresh = false) {
     if (a.isFinished && !b.isFinished) return -1;
     if (!a.isFinished && b.isFinished) return 1;
 
+    if ((a.solvedCount || 0) !== (b.solvedCount || 0)) {
+      return (b.solvedCount || 0) - (a.solvedCount || 0);
+    }
     const mapA = MAP_ORDER[a.currentMapId] || 0;
     const mapB = MAP_ORDER[b.currentMapId] || 0;
     if (mapA !== mapB) return mapB - mapA;
-    if (a.solvedCount !== b.solvedCount) return b.solvedCount - a.solvedCount;
     return (a.lastProgressAt || a.joinedAt || 0) - (b.lastProgressAt || b.joinedAt || 0);
   });
 
@@ -351,14 +353,21 @@ const server = http.createServer(async (req, res) => {
       room._dirty = true;
     }
 
+    const totalPieces = typeof body.totalPieces === 'number' && body.totalPieces >= 18 ? body.totalPieces : 20;
     const nextSolved = isClientStaleForNewRace
       ? 0
-      : (typeof body.solvedCount === 'number' ? body.solvedCount : 0);
+      : nextIsFinished
+      ? totalPieces
+      : Math.max(existing?.solvedCount || 0, typeof body.solvedCount === 'number' ? body.solvedCount : 0);
     const nextMapId = isClientStaleForNewRace
       ? 'MAP_QUANGTRUONG'
+      : nextIsFinished
+      ? 'MAP_BADINH'
       : (body.currentMapId || 'MAP_QUANGTRUONG');
     const nextMapName = isClientStaleForNewRace
       ? 'Quảng Trường Ánh Sáng'
+      : nextIsFinished
+      ? 'Đại Lễ Đài Ba Đình (2/9/1945)'
       : (body.currentMapName || 'Quảng Trường Ánh Sáng');
     const nextName = (body.playerName || 'Hò Văn Tèn').trim().slice(0, 30);
 
@@ -378,7 +387,7 @@ const server = http.createServer(async (req, res) => {
       currentMapId: nextMapId,
       currentMapName: nextMapName,
       solvedCount: nextSolved,
-      totalPieces: typeof body.totalPieces === 'number' ? body.totalPieces : 8,
+      totalPieces,
       isFinished: nextIsFinished,
       finishTimeMs,
       joinedAt,

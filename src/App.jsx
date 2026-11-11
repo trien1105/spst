@@ -2886,18 +2886,23 @@ export default function App() {
   }, [isHostMachine, getApiUrl]);
 
   // Lưu tham chiếu dữ liệu mới nhất vào Ref để vòng lặp đồng bộ không bị hủy/khởi tạo lại liên tục khi người chơi di chuyển hoặc giải đố
+  const totalNpcsCount = useMemo(() => Object.keys(ALL_HISTORICAL_NPCS).length, []);
   const syncStateRef = useRef({});
   useEffect(() => {
+    const isWon = gameStatus === 'WON';
     syncStateRef.current = {
       roomCode,
       showHostModal,
       isAdminAuthenticated,
       playerId,
       playerName: (playerName || 'Hò Văn Tèn').trim(),
-      currentMapId,
-      currentMapName: currentMap?.title?.replace('HÀNH TRÌNH: ', '') || 'Chiến khu',
-      solvedCount: solvedIds.length,
-      isFinished: gameStatus === 'WON',
+      currentMapId: isWon ? 'MAP_BADINH' : currentMapId,
+      currentMapName: isWon
+        ? 'CHƯƠNG 5: ĐẠI LỄ ĐÀI BA ĐÌNH — TUYÊN NGÔN ĐỘC LẬP (2/9/1945)'
+        : (currentMap?.title?.replace('HÀNH TRÌNH: ', '') || 'Chiến khu'),
+      solvedCount: isWon ? totalNpcsCount : solvedIds.length,
+      totalPieces: totalNpcsCount,
+      isFinished: isWon,
       finishTimeMs: finishTimeMsRecord,
       resetPlayerForNewRaceSession
     };
@@ -2910,6 +2915,7 @@ export default function App() {
     currentMapId,
     currentMap,
     solvedIds.length,
+    totalNpcsCount,
     gameStatus,
     finishTimeMsRecord,
     resetPlayerForNewRaceSession
@@ -2985,7 +2991,7 @@ export default function App() {
           currentMapId: st.currentMapId,
           currentMapName: st.currentMapName,
           solvedCount: st.solvedCount,
-          totalPieces: 8,
+          totalPieces: st.totalPieces || totalNpcsCount,
           isFinished: st.isFinished,
           finishTimeMs: st.finishTimeMs,
           clientStartTime: syncedStartTimeRef.current
@@ -3246,10 +3252,10 @@ export default function App() {
           roomCode,
           playerId,
           playerName: (playerName || 'Hò Văn Tèn').trim(),
-          currentMapId: 'map-5-ba-dinh',
-          currentMapName: 'Lễ Đài Ba Đình (1945)',
-          solvedCount: 8,
-          totalPieces: 8,
+          currentMapId: 'MAP_BADINH',
+          currentMapName: 'CHƯƠNG 5: ĐẠI LỄ ĐÀI BA ĐÌNH — TUYÊN NGÔN ĐỘC LẬP (2/9/1945)',
+          solvedCount: totalNpcsCount,
+          totalPieces: totalNpcsCount,
           isFinished: true,
           finishTimeMs: finishMs,
           clientStartTime: syncedStartTimeRef.current
@@ -5770,10 +5776,14 @@ export default function App() {
                         <tbody className="divide-y divide-neutral-800/70">
                           {allPlayers.map((p, idx) => {
                             const rank = idx + 1;
-                            const stepNum = MAP_STEP_NUM[p.currentMapId] || 1;
+                            const stepNum = p.isFinished ? 6 : (MAP_STEP_NUM[p.currentMapId] || 1);
+                            const totalTasks = p.totalPieces && p.totalPieces >= 18 ? p.totalPieces : totalNpcsCount;
+                            const displaySolved = p.isFinished
+                              ? totalTasks
+                              : Math.min(totalTasks, Math.max(0, p.solvedCount || 0));
                             const progressPct = p.isFinished
                               ? 100
-                              : Math.min(95, Math.round(((stepNum - 1) * 15) + ((p.solvedCount || 0) / 8) * 25));
+                              : Math.min(98, Math.round((displaySolved / totalTasks) * 100));
 
                             return (
                               <tr
@@ -5789,7 +5799,7 @@ export default function App() {
                                   {p.name}
                                 </td>
                                 <td className="py-3 px-4 text-neutral-300">
-                                  Màn {stepNum}/6 — {p.currentMapName}
+                                  Màn {stepNum}/6 — {p.isFinished ? 'Đại Lễ Đài Ba Đình (2/9/1945)' : p.currentMapName}
                                 </td>
                                 <td className="py-3 px-4">
                                   <div className="flex items-center space-x-2.5">
@@ -5801,8 +5811,8 @@ export default function App() {
                                         style={{ width: `${progressPct}%` }}
                                       />
                                     </div>
-                                    <span className="font-mono text-neutral-400 w-9 text-right">
-                                      {p.solvedCount}/{p.totalPieces || 8}
+                                    <span className="font-mono text-neutral-300 w-20 text-right">
+                                      {displaySolved}/{totalTasks} ({progressPct}%)
                                     </span>
                                   </div>
                                 </td>
@@ -5957,7 +5967,9 @@ export default function App() {
                       <span className="text-[10px] text-stone-400 truncate hidden lg:inline">({p.currentMapName})</span>
                     </div>
                     <div className="flex items-center space-x-3 shrink-0">
-                      <span className="font-mono text-stone-300 text-[11px]">{p.solvedCount}/8</span>
+                      <span className="font-mono text-stone-300 text-[11px]">
+                        {p.isFinished ? totalNpcsCount : Math.min(totalNpcsCount, p.solvedCount || 0)}/{totalNpcsCount}
+                      </span>
                       <span className="font-mono font-bold text-emerald-400">
                         {p.isFinished
                           ? formatFinishTimeMs(p.finishTimeMs)
@@ -5995,7 +6007,9 @@ export default function App() {
                       <span className="text-[10px] text-stone-400 truncate hidden lg:inline">({p.currentMapName})</span>
                     </div>
                     <div className="flex items-center space-x-3 shrink-0">
-                      <span className="font-mono text-stone-300 text-[11px]">{p.solvedCount}/8</span>
+                      <span className="font-mono text-stone-300 text-[11px]">
+                        {p.isFinished ? totalNpcsCount : Math.min(totalNpcsCount, p.solvedCount || 0)}/{totalNpcsCount}
+                      </span>
                       <span className="font-mono font-bold text-emerald-400">
                         {p.isFinished
                           ? formatFinishTimeMs(p.finishTimeMs)
@@ -6071,7 +6085,9 @@ export default function App() {
                     {p.id === playerId && <span className="text-[10px] text-amber-400">(Bạn)</span>}
                   </div>
                   <div className="flex items-center space-x-2">
-                    <span className="font-mono text-stone-400">{p.solvedCount}/8</span>
+                    <span className="font-mono text-stone-400">
+                      {p.isFinished ? totalNpcsCount : Math.min(totalNpcsCount, p.solvedCount || 0)}/{totalNpcsCount}
+                    </span>
                     <span className="font-mono text-emerald-400 font-bold">
                       {p.isFinished
                         ? formatFinishTimeMs(p.finishTimeMs)
