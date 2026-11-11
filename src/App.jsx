@@ -2226,8 +2226,8 @@ export default function App() {
     return DEFAULT_VPS_URL;
   });
 
-  // Trạng thái kết nối Backend (Luôn giữ ONLINE để không bao giờ hiện popup chặn người chơi)
-  const [backendConnected, setBackendConnected] = useState('ONLINE');
+  // Trạng thái kết nối thực tế tới VPS Backend 180.93.126.40:4000 (Chỉ hiển thị ở badge nhỏ trên thanh trên cùng, không hiện popup chặn màn hình)
+  const [backendConnected, setBackendConnected] = useState('CHECKING');
   const [retryTrigger, setRetryTrigger] = useState(0);
 
   // 3. Tài khoản Admin Host (tk: admin / mk: trienngu) hoặc chạy trực tiếp trên Localhost
@@ -2913,7 +2913,49 @@ export default function App() {
     resetPlayerForNewRaceSession
   ]);
 
-  // Đồng bộ nhịp tim (Heartbeat sync) siêu ổn định qua Ngrok (POST text/plain Simple Request: 0 OPTIONS preflight, không bao giờ hiện popup chặn)
+  // Kiểm tra trạng thái thực tế của VPS Backend 180.93.126.40:4000 qua /health
+  useEffect(() => {
+    let isCancelled = false;
+    let timerId = null;
+
+    const checkBackendHealth = async () => {
+      if (isCancelled) return;
+      const controller = new AbortController();
+      const abortTimer = setTimeout(() => controller.abort(), 4500);
+      try {
+        const res = await fetch(getApiUrl('/health'), {
+          method: 'GET',
+          signal: controller.signal
+        });
+        const contentType = res.headers.get('content-type') || '';
+        if (res.ok && contentType.includes('application/json')) {
+          const data = await res.json();
+          if (!isCancelled) {
+            setBackendConnected(data && data.status === 'ONLINE' ? 'ONLINE' : 'OFFLINE');
+          }
+        } else if (!isCancelled) {
+          setBackendConnected('OFFLINE');
+        }
+      } catch {
+        if (!isCancelled) {
+          setBackendConnected('OFFLINE');
+        }
+      } finally {
+        clearTimeout(abortTimer);
+        if (!isCancelled) {
+          timerId = setTimeout(checkBackendHealth, 5000);
+        }
+      }
+    };
+
+    checkBackendHealth();
+    return () => {
+      isCancelled = true;
+      if (timerId) clearTimeout(timerId);
+    };
+  }, [getApiUrl, retryTrigger]);
+
+  // Đồng bộ nhịp tim (Heartbeat sync) siêu ổn định qua VPS (POST text/plain Simple Request: 0 OPTIONS preflight, không bao giờ hiện popup chặn)
   useEffect(() => {
     let isCancelled = false;
     let timeoutId = null;
@@ -2958,6 +3000,7 @@ export default function App() {
         if (res.ok && contentType.includes('application/json')) {
           const data = await res.json();
           if (!isCancelled && data.success) {
+            setBackendConnected((prev) => (prev !== 'ONLINE' ? 'ONLINE' : prev));
             setMyRankInRoom((prev) => (prev !== (data.rank || 1) ? (data.rank || 1) : prev));
             setTotalPlayersInRoom((prev) => (prev !== (data.totalPlayers || 1) ? (data.totalPlayers || 1) : prev));
 
@@ -2981,8 +3024,13 @@ export default function App() {
               }
             }
           }
+        } else if (!isCancelled) {
+          setBackendConnected((prev) => (prev !== 'OFFLINE' ? 'OFFLINE' : prev));
         }
       } catch (e) {
+        if (!isCancelled) {
+          setBackendConnected((prev) => (prev !== 'OFFLINE' ? 'OFFLINE' : prev));
+        }
       } finally {
         clearTimeout(abortTimer);
         if (!isCancelled) {
@@ -4254,7 +4302,7 @@ export default function App() {
                 ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50'
                 : backendConnected === 'CHECKING'
                 ? 'bg-amber-950/80 text-amber-300 border-amber-500/50 animate-pulse'
-                : 'bg-red-950/90 text-red-300 border-red-500 animate-bounce'
+                : 'bg-red-950/90 text-red-300 border-red-500/60'
             }`}
             title={`Backend Server: ${backendUrl || 'Chưa cấu hình'}`}
           >

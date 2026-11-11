@@ -24,3 +24,4 @@ else
   echo "[INFO] Dang chay truc tiep bang Node.js tai http://180.93.126.40:4000 ..."
   node server.js
 fi
+
