@@ -140,10 +140,11 @@ function getSerializedRoom(room, forceRefresh = false) {
 }
 
 const server = http.createServer(async (req, res) => {
-  // CORS Headers cho phép giao diện Vercel (https://conduongdoclap.vercel.app) kết nối mượt mà vào máy Host
+  // CORS & Private Network Access Headers cho phép https://conduongdoclap.vercel.app gọi thẳng vào http://localhost:4000 trên máy hiện tại
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Bypass-Tunnel-Reminder');
+  res.setHeader('Access-Control-Allow-Private-Network', 'true');
 
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;

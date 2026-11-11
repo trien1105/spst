@@ -2163,20 +2163,7 @@ export default function App() {
     }
   });
 
-  // 3. Kiểm tra máy chủ có phải localhost hay không (Chỉ Localhost hoặc ?host=1 mới có quyền Host)
-  const isHostMachine = useMemo(() => {
-    if (typeof window === 'undefined') return false;
-    const h = window.location.hostname;
-    const isLocal = h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || h === '0.0.0.0';
-    try {
-      const p = new URLSearchParams(window.location.search);
-      return isLocal || p.get('host') === '1';
-    } catch {
-      return isLocal;
-    }
-  }, []);
-
-  // 3.1. Cấu hình Backend Server URL (Chạy trên PC của bạn, phục vụ cho giao diện Vercel)
+  // 3.1. Cấu hình Backend Server URL (Bắt buộc chạy trên PC của bạn ở cổng 4000 hoặc Tunnel, Vercel chỉ lo giao diện)
   const [backendUrl, setBackendUrl] = useState(() => {
     try {
       const params = new URLSearchParams(window.location.search);
@@ -2187,15 +2174,28 @@ export default function App() {
         return clean;
       }
       const saved = localStorage.getItem('cddl_backend_url');
-      if (saved) return saved;
-
-      const h = window.location.hostname;
-      if (h === 'localhost' || h === '127.0.0.1') {
-        return 'http://localhost:4000';
-      }
+      if (saved && saved.trim()) return saved.trim();
     } catch {}
-    return '';
+    return 'http://localhost:4000';
   });
+
+  // Trạng thái kết nối thực tế tới Backend ('CHECKING' | 'ONLINE' | 'OFFLINE')
+  const [backendConnected, setBackendConnected] = useState('CHECKING');
+  const [retryTrigger, setRetryTrigger] = useState(0);
+
+  // 3. Kiểm tra quyền Host (Máy chạy localhost hoặc kết nối trực tiếp vào localhost:4000 trên chính PC này)
+  const isHostMachine = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    const h = window.location.hostname;
+    const isLocalHost = h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || h === '0.0.0.0';
+    const isPointingToLocalEngine = backendUrl.includes('localhost') || backendUrl.includes('127.0.0.1');
+    try {
+      const p = new URLSearchParams(window.location.search);
+      return isLocalHost || isPointingToLocalEngine || p.get('host') === '1';
+    } catch {
+      return isLocalHost || isPointingToLocalEngine;
+    }
+  }, [backendUrl]);
 
   // 3.2. Tên miền Giao diện Frontend (https://conduongdoclap.vercel.app)
   const [frontendDomain, setFrontendDomain] = useState(() => {
@@ -2661,15 +2661,14 @@ export default function App() {
 
     const syncWithRoom = async () => {
       if (isCancelled) return;
-      // Nếu đang trên Vercel mà chưa cấu hình backendUrl thì bỏ qua request thừa để giao diện mượt tuyệt đối
-      const isRemoteStatic = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app') && !backendUrl;
-      if (isRemoteStatic) {
-        timeoutId = setTimeout(syncWithRoom, 3000);
+      if (!backendUrl || !backendUrl.trim()) {
+        setBackendConnected('OFFLINE');
+        timeoutId = setTimeout(syncWithRoom, 2000);
         return;
       }
 
       const controller = new AbortController();
-      const abortTimer = setTimeout(() => controller.abort(), 2400);
+      const abortTimer = setTimeout(() => controller.abort(), 2200);
 
       try {
         const payload = {
@@ -2698,6 +2697,7 @@ export default function App() {
         if (res.ok && contentType.includes('application/json')) {
           const data = await res.json();
           if (!isCancelled && data.success) {
+            setBackendConnected('ONLINE');
             setMyRankInRoom((prev) => (prev !== (data.rank || 1) ? (data.rank || 1) : prev));
             setTotalPlayersInRoom((prev) => (prev !== (data.totalPlayers || 1) ? (data.totalPlayers || 1) : prev));
 
@@ -2715,14 +2715,20 @@ export default function App() {
               raceStartSeenRef.current = false;
               setRaceElapsedSeconds(0);
             }
+          } else if (!isCancelled) {
+            setBackendConnected('OFFLINE');
           }
+        } else if (!isCancelled) {
+          setBackendConnected('OFFLINE');
         }
       } catch (e) {
-        // Chạy offline an toàn
+        if (!isCancelled) {
+          setBackendConnected('OFFLINE');
+        }
       } finally {
         clearTimeout(abortTimer);
         if (!isCancelled) {
-          timeoutId = setTimeout(syncWithRoom, 2000);
+          timeoutId = setTimeout(syncWithRoom, 1800);
         }
       }
     };
@@ -2732,7 +2738,7 @@ export default function App() {
       isCancelled = true;
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [roomCode, playerId, playerName, currentMapId, currentMap, solvedIds.length, gameStatus, finishTimeMsRecord, backendUrl, getApiUrl]);
+  }, [roomCode, playerId, playerName, currentMapId, currentMap, solvedIds.length, gameStatus, finishTimeMsRecord, backendUrl, getApiUrl, retryTrigger]);
 
   // Bộ đếm thời gian thi đấu tăng mỗi giây khi trạng thái RACING
   useEffect(() => {
@@ -3107,7 +3113,7 @@ export default function App() {
         let anyAgentNear = false;
 
       // 1. CẬP NHẬT VỊ TRÍ NGƯỜI CHƠI (TỐC ĐỘ THONG THẢ 2.6 TILES/S)
-      if (gameStatus === 'PLAYING' && !activeNpc && !mapTransitionText && !capturedModalRef.current) {
+      if (gameStatus === 'PLAYING' && backendConnected === 'ONLINE' && !activeNpc && !mapTransitionText && !capturedModalRef.current) {
         let vx = 0;
         let vy = 0;
 
@@ -3954,7 +3960,7 @@ export default function App() {
     animationId = requestAnimationFrame(gameLoop);
 
     return () => cancelAnimationFrame(animationId);
-  }, [gameStatus, activeNpc, currentMapId, currentTargetNpcId, solvedIds, targetNpc, assetsLoaded, mapTransitionText, collectedItems, zoomLevel, activeDroppedItem, readyCraftRecipe, currentMapRecipe, isCurMapAllNpcsSolved, nextUnsolvedNpcInMap, forwardNextPortal, playerName]);
+  }, [gameStatus, backendConnected, activeNpc, currentMapId, currentTargetNpcId, solvedIds, targetNpc, assetsLoaded, mapTransitionText, collectedItems, zoomLevel, activeDroppedItem, readyCraftRecipe, currentMapRecipe, isCurMapAllNpcsSolved, nextUnsolvedNpcInMap, forwardNextPortal, playerName]);
 
   // Đếm tiến trình hoàn thành của chương hiện tại
   const currentChapterNpcs = useMemo(() => {
@@ -3968,9 +3974,9 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#111c18] text-stone-100 flex flex-col font-sans selection:bg-amber-600 selection:text-black select-none">
       {/* ===================================================================
-          1. THANH ĐIỀU HƯỚNG THỐNG NHẤT - CON ĐƯỜNG ĐỘC LẬP (1930 – 1945)
+          1. THANH ĐIỀU HƯỚNG CÁCH MẠNG - CON ĐƯỜNG ĐỘC LẬP (1930 – 1945)
       =================================================================== */}
-      <header className="bg-gradient-to-r from-[#13241d] via-[#172b23] to-[#13241d] border-b border-amber-500/30 px-3 sm:px-5 py-2 flex items-center justify-between shadow-xl z-30 flex-wrap gap-2.5">
+      <header className="bg-gradient-to-r from-[#2b0808] via-[#3b0d0d] to-[#220a0a] border-b-2 border-amber-500/60 px-3 sm:px-5 py-2.5 flex items-center justify-between shadow-2xl z-30 flex-wrap gap-2.5">
         {/* CỤM TRÁI: THƯƠNG HIỆU "CON ĐƯỜNG ĐỘC LẬP" & HỒ SƠ CHIẾN SĨ */}
         <div className="flex items-center space-x-2.5 sm:space-x-3.5">
           <div className="flex items-center space-x-2.5">
@@ -4019,8 +4025,38 @@ export default function App() {
           </div>
         </div>
 
-        {/* CỤM GIỮA: TRUNG TÂM ĐUA TOP TRỰC TIẾP (TÍCH HỢP GỌN GÀNG TRÊN 1 THANH) */}
-        <div className="flex items-center bg-[#0d1914]/95 border border-[#28473b] rounded-xl px-2.5 py-1 space-x-2 sm:space-x-3 shadow-inner">
+        {/* CỤM GIỮA: TRẠNG THÁI BACKEND & TRUNG TÂM ĐUA TOP 60 NGƯỜI */}
+        <div className="flex items-center bg-[#160707]/95 border border-amber-500/40 rounded-xl px-3 py-1 space-x-2 sm:space-x-3 shadow-inner">
+          {/* Trạng thái kết nối Backend trên máy hiện tại */}
+          <div
+            className={`flex items-center space-x-1.5 px-2 py-0.5 rounded-lg text-[11px] font-extrabold border ${
+              backendConnected === 'ONLINE'
+                ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50'
+                : backendConnected === 'CHECKING'
+                ? 'bg-amber-950/80 text-amber-300 border-amber-500/50 animate-pulse'
+                : 'bg-red-950/90 text-red-300 border-red-500 animate-bounce'
+            }`}
+            title={`Backend Server: ${backendUrl || 'Chưa cấu hình'}`}
+          >
+            <span
+              className={`w-2 h-2 rounded-full ${
+                backendConnected === 'ONLINE'
+                  ? 'bg-emerald-400 animate-ping'
+                  : backendConnected === 'CHECKING'
+                  ? 'bg-amber-400'
+                  : 'bg-red-500'
+              }`}
+            />
+            <span>
+              {backendConnected === 'ONLINE'
+                ? 'BE: ONLINE'
+                : backendConnected === 'CHECKING'
+                ? 'BE: ĐANG KẾT NỐI...'
+                : 'BE: ĐÃ TẮT'}
+            </span>
+          </div>
+
+          <span className="text-amber-500/40">•</span>
           <div className="flex items-center space-x-1.5">
             <Trophy className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
             <span className="text-[11px] text-stone-400 hidden sm:inline">Phòng:</span>
@@ -5587,6 +5623,67 @@ export default function App() {
               className="mt-3 w-full bg-amber-500 hover:bg-amber-400 text-stone-950 font-black py-2 rounded-xl text-xs uppercase"
             >
               Đóng
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================================
+          13. MÀN HÌNH KHÓA KHI TẮT BACKEND (BẮT BUỘC CHẠY BE TRÊN MÁY HIỆN TẠI)
+      =================================================================== */}
+      {backendConnected === 'OFFLINE' && (
+        <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-gradient-to-b from-[#260909] to-[#120606] border-2 border-red-500 rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl text-center text-stone-100">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-red-600/20 border-2 border-red-500 flex items-center justify-center text-3xl animate-bounce">
+              ⚡
+            </div>
+            <span className="text-[11px] font-mono font-black uppercase tracking-widest bg-red-950 text-red-300 border border-red-500/50 px-3 py-1 rounded-full">
+              MÁY CHỦ BACKEND ĐANG TẮT (SERVER OFFLINE)
+            </span>
+            <h2 className="text-xl sm:text-2xl font-black text-amber-300 uppercase tracking-wide mt-3">
+              CON ĐƯỜNG ĐỘC LẬP (1930 – 1945)
+            </h2>
+            <p className="text-xs sm:text-sm text-stone-300 mt-2 leading-relaxed">
+              Giao diện <b>Vercel</b> chỉ phụ trách hiển thị hình ảnh. Toàn bộ xử lý trò chơi và đồng bộ <b>60 người chơi</b> bắt buộc phải chạy qua <b>Backend trên máy tính của bạn</b>.
+            </p>
+
+            <div className="my-4 p-4 bg-black/50 border border-amber-500/30 rounded-2xl text-left text-xs space-y-2">
+              <div className="font-bold text-amber-300 uppercase">Cách bật lại Backend để chơi ngay:</div>
+              <p className="text-stone-300">
+                1. Trên máy tính của bạn, mở thư mục dự án và chạy file <code className="bg-red-950/80 text-amber-200 px-1.5 py-0.5 rounded font-mono">run-backend.bat</code> (hoặc lệnh <code className="bg-red-950/80 text-amber-200 px-1.5 py-0.5 rounded font-mono">node server.js</code>).
+              </p>
+              <p className="text-stone-300">
+                2. Nếu chơi từ điện thoại/máy khác qua mạng, hãy nhập link HTTPS Tunnel (từ <code className="bg-red-950/80 text-amber-200 px-1.5 py-0.5 rounded font-mono">run-backend-tunnel.bat</code>) vào ô bên dưới:
+              </p>
+
+              <div className="pt-2">
+                <label className="text-[11px] font-bold text-emerald-300 block mb-1">
+                  Địa chỉ Máy chủ Backend (Host PC):
+                </label>
+                <input
+                  type="text"
+                  value={backendUrl}
+                  onChange={(e) => {
+                    const val = e.target.value.trim();
+                    setBackendUrl(val);
+                    try {
+                      localStorage.setItem('cddl_backend_url', val);
+                    } catch {}
+                  }}
+                  placeholder="http://localhost:4000 hoặc https://xxxx.loca.lt"
+                  className="w-full bg-[#1a0b0b] border border-amber-500/50 text-xs font-mono text-amber-200 px-3 py-2 rounded-xl focus:outline-none focus:border-amber-400"
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                setBackendConnected('CHECKING');
+                setRetryTrigger((c) => c + 1);
+              }}
+              className="w-full py-3 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-stone-950 font-black rounded-xl text-xs sm:text-sm uppercase tracking-wider shadow-xl transition active:scale-95"
+            >
+              🔄 KẾT NỐI LẠI VỚI BACKEND NGAY
             </button>
           </div>
         </div>
