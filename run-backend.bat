@@ -1,9 +1,9 @@
 @echo off
-title MAY CHU BACKEND - DUA TOP VNR202 (PORT 4000)
+title MAY CHU BACKEND CUC BO - CON DUONG DOC LAP (PORT 4000)
 color 0E
 
 echo ======================================================================
-echo           KHOI CHAY BACKEND MAY CHU DUA TOP VNR202 (PORT 4000)
+echo       KHOI CHAY ENGINE JS ^& BACKEND CON DUONG DOC LAP (PORT 4000)
 echo ======================================================================
 echo.
 
@@ -12,8 +12,7 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":4000" ^| findstr "LISTENING
     taskkill /F /PID %%a >nul 2>nul
 )
 
-echo [DANG KHOI DONG BACKEND...]
+echo [DANG KHOI DONG MAY CHU CUC BO CHIU TAI 60 NGUOI...]
 node server.js
 
 pause
-

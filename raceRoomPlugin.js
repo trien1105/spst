@@ -1,7 +1,90 @@
 import os from 'os';
 
+const MAP_ORDER = {
+  'map-5-ba-dinh': 5,
+  'map-4-tan-trao': 4,
+  'map-3-ba-diem': 3,
+  'map-2-ha-noi': 2,
+  'map-1-pac-bo': 1,
+  'map-0-quang-truong': 0,
+  'MAP_BADINH': 5,
+  'MAP_TANTRAO': 4,
+  'MAP_BADIEM': 3,
+  'MAP_HANOI': 2,
+  'MAP_PACBO': 1,
+  'MAP_QUANGTRUONG': 0
+};
+
+function createDefaultRoom(code, maxPlayers = 60, title = 'Đua Top Con Đường Độc Lập (1930 - 1945)') {
+  return {
+    code,
+    title,
+    maxPlayers,
+    status: 'WAITING',
+    startTime: null,
+    endTime: null,
+    createdAt: Date.now(),
+    players: new Map(),
+    _cachedSerialized: null,
+    _rankMap: new Map(),
+    _lastSortAt: 0,
+    _dirty: true
+  };
+}
+
+function getSerializedRoom(room, forceRefresh = false) {
+  const now = Date.now();
+  if (!forceRefresh && !room._dirty && room._cachedSerialized && (now - room._lastSortAt) < 350) {
+    return room._cachedSerialized;
+  }
+
+  const allPlayers = [];
+  for (const p of room.players.values()) {
+    allPlayers.push({
+      ...p,
+      isOnline: (now - p.lastSeen) < 25000
+    });
+  }
+
+  allPlayers.sort((a, b) => {
+    if (a.isFinished && b.isFinished) {
+      return (a.finishTimeMs || 0) - (b.finishTimeMs || 0);
+    }
+    if (a.isFinished && !b.isFinished) return -1;
+    if (!a.isFinished && b.isFinished) return 1;
+
+    const mapA = MAP_ORDER[a.currentMapId] || 0;
+    const mapB = MAP_ORDER[b.currentMapId] || 0;
+    if (mapA !== mapB) return mapB - mapA;
+    if (a.solvedCount !== b.solvedCount) return b.solvedCount - a.solvedCount;
+    return b.lastSeen - a.lastSeen;
+  });
+
+  const rankMap = new Map();
+  for (let i = 0; i < allPlayers.length; i++) {
+    rankMap.set(allPlayers[i].id, i + 1);
+  }
+
+  const serialized = {
+    code: room.code,
+    title: room.title,
+    maxPlayers: room.maxPlayers,
+    status: room.status,
+    startTime: room.startTime,
+    endTime: room.endTime,
+    playerCount: allPlayers.length,
+    leaderboard: allPlayers
+  };
+
+  room._cachedSerialized = serialized;
+  room._rankMap = rankMap;
+  room._lastSortAt = now;
+  room._dirty = false;
+  return serialized;
+}
+
 export function raceRoomPlugin() {
-  const rooms = new Map(); // roomCode -> roomData
+  const rooms = new Map();
 
   function getLanIp() {
     const interfaces = os.networkInterfaces();
@@ -18,7 +101,10 @@ export function raceRoomPlugin() {
   function parseBody(req) {
     return new Promise((resolve) => {
       let data = '';
-      req.on('data', chunk => data += chunk);
+      req.on('data', (chunk) => {
+        data += chunk;
+        if (data.length > 32768) req.destroy();
+      });
       req.on('end', () => {
         try {
           resolve(JSON.parse(data || '{}'));
@@ -26,6 +112,7 @@ export function raceRoomPlugin() {
           resolve({});
         }
       });
+      req.on('error', () => resolve({}));
     });
   }
 
@@ -40,10 +127,10 @@ export function raceRoomPlugin() {
           return next();
         }
 
-        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Bypass-Tunnel-Reminder');
 
         if (req.method === 'OPTIONS') {
           res.statusCode = 204;
@@ -51,7 +138,6 @@ export function raceRoomPlugin() {
           return;
         }
 
-        // Endpoint: GET /api/race/info
         if (pathname === '/api/race/info') {
           const lanIp = getLanIp();
           res.end(JSON.stringify({
@@ -62,66 +148,33 @@ export function raceRoomPlugin() {
           return;
         }
 
-        // Endpoint: POST /api/race/create
         if (pathname === '/api/race/create' && req.method === 'POST') {
           const body = await parseBody(req);
-          const code = (body.roomCode || 'VNR202').trim().toUpperCase();
+          const code = (body.roomCode || 'DOCLAP').trim().toUpperCase();
           const maxPlayers = body.maxPlayers || 60;
-          
-          const room = {
-            code,
-            title: body.title || 'Đua Top Lịch Sử VNR202 (1930 - 1945)',
-            maxPlayers,
-            status: 'WAITING', // WAITING | RACING | FINISHED
-            startTime: null,
-            endTime: null,
-            createdAt: Date.now(),
-            players: new Map(), // playerId -> playerData
-          };
-          
+          const room = createDefaultRoom(code, maxPlayers, body.title || 'Đua Top Con Đường Độc Lập (1930 - 1945)');
           rooms.set(code, room);
-          res.end(JSON.stringify({ success: true, room: serializeRoom(room) }));
+          res.end(JSON.stringify({ success: true, room: getSerializedRoom(room, true) }));
           return;
         }
 
-        // Endpoint: GET /api/race/room
         if (pathname === '/api/race/room' && req.method === 'GET') {
-          const code = (parsedUrl.searchParams.get('code') || 'VNR202').trim().toUpperCase();
+          const code = (parsedUrl.searchParams.get('code') || 'DOCLAP').trim().toUpperCase();
           let room = rooms.get(code);
           if (!room) {
-            // Auto-create default room if not found
-            room = {
-              code,
-              title: 'Đua Top Lịch Sử VNR202 (1930 - 1945)',
-              maxPlayers: 60,
-              status: 'WAITING',
-              startTime: null,
-              endTime: null,
-              createdAt: Date.now(),
-              players: new Map(),
-            };
+            room = createDefaultRoom(code);
             rooms.set(code, room);
           }
-          res.end(JSON.stringify({ success: true, room: serializeRoom(room) }));
+          res.end(JSON.stringify({ success: true, room: getSerializedRoom(room) }));
           return;
         }
 
-        // Endpoint: POST /api/race/action (START, RESET, END)
         if (pathname === '/api/race/action' && req.method === 'POST') {
           const body = await parseBody(req);
-          const code = (body.roomCode || 'VNR202').trim().toUpperCase();
+          const code = (body.roomCode || 'DOCLAP').trim().toUpperCase();
           let room = rooms.get(code);
           if (!room) {
-            room = {
-              code,
-              title: 'Đua Top Lịch Sử VNR202 (1930 - 1945)',
-              maxPlayers: 60,
-              status: 'WAITING',
-              startTime: null,
-              endTime: null,
-              createdAt: Date.now(),
-              players: new Map(),
-            };
+            room = createDefaultRoom(code);
             rooms.set(code, room);
           }
 
@@ -141,7 +194,7 @@ export function raceRoomPlugin() {
               p.isFinished = false;
               p.finishTimeMs = null;
               p.solvedCount = 0;
-              p.currentMapId = 'map-0-quang-truong';
+              p.currentMapId = 'MAP_QUANGTRUONG';
               p.currentMapName = 'Quảng Trường Ánh Sáng';
             }
           } else if (body.action === 'END') {
@@ -149,63 +202,66 @@ export function raceRoomPlugin() {
             room.endTime = Date.now();
           }
 
-          res.end(JSON.stringify({ success: true, room: serializeRoom(room) }));
+          room._dirty = true;
+          res.end(JSON.stringify({ success: true, room: getSerializedRoom(room, true) }));
           return;
         }
 
-        // Endpoint: POST /api/race/sync (Player heartbeats & progress)
         if (pathname === '/api/race/sync' && req.method === 'POST') {
           const body = await parseBody(req);
-          const code = (body.roomCode || 'VNR202').trim().toUpperCase();
+          const code = (body.roomCode || 'DOCLAP').trim().toUpperCase();
           let room = rooms.get(code);
-          
+
           if (!room) {
-            room = {
-              code,
-              title: 'Đua Top Lịch Sử VNR202 (1930 - 1945)',
-              maxPlayers: 60,
-              status: 'WAITING',
-              startTime: null,
-              endTime: null,
-              createdAt: Date.now(),
-              players: new Map(),
-            };
+            room = createDefaultRoom(code);
             rooms.set(code, room);
           }
 
           const pid = (body.playerId || 'anonymous').trim();
-          const existing = room.players.get(pid) || {};
+          const existing = room.players.get(pid);
 
-          let finishTimeMs = existing.finishTimeMs || null;
+          let finishTimeMs = existing?.finishTimeMs || null;
           if (body.isFinished && !finishTimeMs) {
             finishTimeMs = room.startTime ? Math.max(1000, Date.now() - room.startTime) : (body.finishTimeMs || 1000);
+            room._dirty = true;
           }
 
-          const playerData = {
+          const nextSolved = typeof body.solvedCount === 'number' ? body.solvedCount : 0;
+          const nextMapId = body.currentMapId || 'MAP_QUANGTRUONG';
+          const nextName = (body.playerName || 'Hò Văn Tèn').trim().slice(0, 30);
+
+          if (
+            !existing ||
+            existing.solvedCount !== nextSolved ||
+            existing.currentMapId !== nextMapId ||
+            existing.name !== nextName ||
+            existing.isFinished !== !!body.isFinished
+          ) {
+            room._dirty = true;
+          }
+
+          room.players.set(pid, {
             id: pid,
-            name: (body.playerName || 'Hò Văn Tèn').trim().slice(0, 30),
-            currentMapId: body.currentMapId || 'map-0-quang-truong',
+            name: nextName,
+            currentMapId: nextMapId,
             currentMapName: body.currentMapName || 'Quảng Trường Ánh Sáng',
-            solvedCount: typeof body.solvedCount === 'number' ? body.solvedCount : 0,
+            solvedCount: nextSolved,
             totalPieces: typeof body.totalPieces === 'number' ? body.totalPieces : 8,
             isFinished: !!body.isFinished,
-            finishTimeMs: finishTimeMs,
+            finishTimeMs,
             lastSeen: Date.now()
-          };
+          });
 
-          room.players.set(pid, playerData);
-
-          const sRoom = serializeRoom(room);
-          const myRank = sRoom.leaderboard.findIndex(p => p.id === pid) + 1;
+          const sRoom = getSerializedRoom(room);
+          const myRank = room._rankMap.get(pid) || 1;
 
           res.end(JSON.stringify({
             success: true,
             roomStatus: room.status,
             startTime: room.startTime,
             endTime: room.endTime,
-            rank: myRank > 0 ? myRank : 1,
-            totalPlayers: sRoom.leaderboard.length,
-            leaderboard: sRoom.leaderboard.slice(0, 10)
+            rank: myRank,
+            totalPlayers: sRoom.playerCount
           }));
           return;
         }
@@ -215,49 +271,3 @@ export function raceRoomPlugin() {
     }
   };
 }
-
-function serializeRoom(room) {
-  const now = Date.now();
-  // Mark offline if no ping in 25 seconds
-  const allPlayers = Array.from(room.players.values()).map(p => ({
-    ...p,
-    isOnline: (now - p.lastSeen) < 25000
-  }));
-
-  const MAP_ORDER = {
-    'map-5-ba-dinh': 5,
-    'map-4-tan-trao': 4,
-    'map-3-ba-diem': 3,
-    'map-2-ha-noi': 2,
-    'map-1-pac-bo': 1,
-    'map-0-quang-truong': 0
-  };
-
-  allPlayers.sort((a, b) => {
-    // 1. Finished players come first, sorted by fastest finish time
-    if (a.isFinished && b.isFinished) {
-      return (a.finishTimeMs || 0) - (b.finishTimeMs || 0);
-    }
-    if (a.isFinished && !b.isFinished) return -1;
-    if (!a.isFinished && b.isFinished) return 1;
-
-    // 2. Both still racing: sort by highest map index, then solvedCount desc
-    const mapA = MAP_ORDER[a.currentMapId] || 0;
-    const mapB = MAP_ORDER[b.currentMapId] || 0;
-    if (mapA !== mapB) return mapB - mapA;
-    if (a.solvedCount !== b.solvedCount) return b.solvedCount - a.solvedCount;
-    return b.lastSeen - a.lastSeen;
-  });
-
-  return {
-    code: room.code,
-    title: room.title,
-    maxPlayers: room.maxPlayers,
-    status: room.status,
-    startTime: room.startTime,
-    endTime: room.endTime,
-    playerCount: allPlayers.length,
-    leaderboard: allPlayers
-  };
-}
-

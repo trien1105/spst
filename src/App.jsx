@@ -138,9 +138,9 @@ const TILES = {
 };
 
 // =========================================================================
-// 3. CƠ SỞ DỮ LIỆU TOÀN DIỆN VĂN KIỆN & 18 NHÂN VẬT VNR202 (35+ CÂU HỎI)
+// 3. CƠ SỞ DỮ LIỆU TOÀN DIỆN VĂN KIỆN & 18 NHÂN VẬT CON ĐƯỜNG ĐỘC LẬP (35+ CÂU HỎI)
 // =========================================================================
-const VNR202_DIRECTIVES = [
+const HISTORICAL_DIRECTIVES = [
   { id: 'DIR_1930_CUONGLINH', title: 'Cương lĩnh chính trị đầu tiên', year: 1930, author: 'Nguyễn Ái Quốc', desc: 'Độc lập dân tộc gắn liền với Chủ nghĩa Xã hội' },
   { id: 'DIR_1930_LUANCUONG', title: 'Luận cương chính trị tháng 10', year: 1930, author: 'Trần Phú', desc: 'Sứ mệnh lịch sử của giai cấp công nhân và liên minh công nông' },
   { id: 'DIR_1935_DAIHOI1', title: 'Nghị quyết Đại hội Đảng lần I', year: 1935, author: 'Lê Hồng Phong', desc: 'Khôi phục toàn diện hệ thống tổ chức Đảng sau khủng bố trắng' },
@@ -155,7 +155,7 @@ const ALL_HISTORICAL_NPCS = {
   NPC_ANH: {
     id: 'NPC_ANH',
     name: "Anh",
-    role: "Trưởng nhóm Nghiên cứu VNR202",
+    role: "Đội trưởng Đội Tiên phong",
     mapId: 'MAP_QUANGTRUONG',
     x: 6,
     y: 6,
@@ -163,7 +163,7 @@ const ALL_HISTORICAL_NPCS = {
     directiveKey: 'null',
     questions: [
       {
-        question: "Chào bạn! Để mở đầu hành trình khảo cứu Lịch sử Đảng (VNR202), bạn hãy nêu rõ: Dưới ách thống trị của thực dân Pháp, xã hội Việt Nam tồn tại hai mâu thuẫn cơ bản nào?",
+        question: "Chào bạn! Để mở đầu hành trình Con đường Độc lập (1930 – 1945), bạn hãy nêu rõ: Dưới ách thống trị của thực dân Pháp, xã hội Việt Nam tồn tại hai mâu thuẫn cơ bản nào?",
         options: [
           {
             text: "A. Mâu thuẫn giữa tư sản dân tộc với thực dân Pháp; và mâu thuẫn giữa trí thức tiểu tư sản với phong kiến tay sai.",
@@ -241,7 +241,7 @@ const ALL_HISTORICAL_NPCS = {
   NPC_BINH: {
     id: 'NPC_BINH',
     name: "Bình",
-    role: "Thành viên Nhóm VNR202",
+    role: "Chiến sĩ Đội Tiên phong",
     mapId: 'MAP_QUANGTRUONG',
     x: 16,
     y: 4,
@@ -327,7 +327,7 @@ const ALL_HISTORICAL_NPCS = {
   NPC_LINH: {
     id: 'NPC_LINH',
     name: "Linh",
-    role: "Thành viên Nhóm VNR202",
+    role: "Chiến sĩ Đội Tiên phong",
     mapId: 'MAP_QUANGTRUONG',
     x: 26,
     y: 5,
@@ -413,7 +413,7 @@ const ALL_HISTORICAL_NPCS = {
   NPC_NGOC: {
     id: 'NPC_NGOC',
     name: "Ngọc",
-    role: "Thành viên Nhóm VNR202",
+    role: "Chiến sĩ Đội Tiên phong",
     mapId: 'MAP_QUANGTRUONG',
     x: 22,
     y: 10,
@@ -499,7 +499,7 @@ const ALL_HISTORICAL_NPCS = {
   NPC_DUNG: {
     id: 'NPC_DUNG',
     name: "Dũng",
-    role: "Thành viên Nhóm VNR202",
+    role: "Chiến sĩ Đội Tiên phong",
     mapId: 'MAP_QUANGTRUONG',
     x: 26,
     y: 19,
@@ -585,7 +585,7 @@ const ALL_HISTORICAL_NPCS = {
   NPC_KHANH: {
     id: 'NPC_KHANH',
     name: "Khánh",
-    role: "Thành viên Nhóm VNR202",
+    role: "Chiến sĩ Đội Tiên phong",
     mapId: 'MAP_QUANGTRUONG',
     x: 16,
     y: 20,
@@ -671,7 +671,7 @@ const ALL_HISTORICAL_NPCS = {
   NPC_DUC: {
     id: 'NPC_DUC',
     name: "Đức",
-    role: "Thành viên Nhóm VNR202",
+    role: "Chiến sĩ Đội Tiên phong",
     mapId: 'MAP_QUANGTRUONG',
     x: 6,
     y: 19,
@@ -757,7 +757,7 @@ const ALL_HISTORICAL_NPCS = {
   NPC_HUNG: {
     id: 'NPC_HUNG',
     name: "Hùng",
-    role: "Thành viên Nhóm VNR202",
+    role: "Chiến sĩ Đội Tiên phong",
     mapId: 'MAP_QUANGTRUONG',
     x: 4,
     y: 12,
@@ -1715,10 +1715,10 @@ const MAP_DEFINITIONS = {
   MAP_QUANGTRUONG: {
     id: 'MAP_QUANGTRUONG',
     chapterNum: 0,
-    title: 'HÀNH TRÌNH: 8 THÀNH VIÊN VNR202',
+    title: 'KHỞI NGUỒN: QUẢNG TRƯỜNG ÁNH SÁNG',
     subtitle: 'Khảo cứu cùng: Anh, Bình, Linh, Ngọc, Dũng, Khánh, Đức, Hùng',
     groundLabel1: 'QUẢNG TRƯỜNG ÁNH SÁNG',
-    groundLabel2: 'MINH ĐĂNG',
+    groundLabel2: 'CON ĐƯỜNG ĐỘC LẬP',
     generator: () => {
       const map = [];
       for (let y = 0; y < MAP_HEIGHT; y++) {
@@ -2121,7 +2121,7 @@ export default function App() {
   // Modal cảnh báo khi chưa đủ bảo vật cử hành tại Lễ Đài Ba Đình
   const [podiumWarningModal, setPodiumWarningModal] = useState(null);
 
-  // Mục tiêu kế tiếp (Mặc định là Anh - Trưởng nhóm VNR202)
+  // Mục tiêu kế tiếp (Mặc định là Anh - Trưởng nhóm CON ĐƯỜNG ĐỘC LẬP)
   const [currentTargetNpcId, setCurrentTargetNpcId] = useState('NPC_ANH');
 
   // Hộp thoại & UI State (Đa câu hỏi)
@@ -2143,7 +2143,7 @@ export default function App() {
   // 1. Tên nhân vật (Mặc định 'Hò Văn Tèn', lưu localStorage)
   const [playerName, setPlayerName] = useState(() => {
     try {
-      return localStorage.getItem('vnr202_player_name') || 'Hò Văn Tèn';
+      return localStorage.getItem('cddl_player_name') || 'Hò Văn Tèn';
     } catch {
       return 'Hò Văn Tèn';
     }
@@ -2152,10 +2152,10 @@ export default function App() {
   // 2. ID duy nhất của người chơi
   const [playerId] = useState(() => {
     try {
-      let id = localStorage.getItem('vnr202_player_id');
+      let id = localStorage.getItem('cddl_player_id');
       if (!id) {
         id = 'p_' + Math.random().toString(36).substring(2, 9);
-        localStorage.setItem('vnr202_player_id', id);
+        localStorage.setItem('cddl_player_id', id);
       }
       return id;
     } catch {
@@ -2183,10 +2183,10 @@ export default function App() {
       const queryApi = params.get('api') || params.get('server') || params.get('backend');
       if (queryApi) {
         const clean = queryApi.trim().replace(/\/+$/, '');
-        localStorage.setItem('vnr202_backend_url', clean);
+        localStorage.setItem('cddl_backend_url', clean);
         return clean;
       }
-      const saved = localStorage.getItem('vnr202_backend_url');
+      const saved = localStorage.getItem('cddl_backend_url');
       if (saved) return saved;
 
       const h = window.location.hostname;
@@ -2216,13 +2216,13 @@ export default function App() {
     return `${base}${ep}`;
   }, [backendUrl]);
 
-  // 4. Mã phòng thi đấu (tự động nhận từ ?room=XYZ hoặc mặc định VNR202)
+  // 4. Mã phòng thi đấu (tự động nhận từ ?room=XYZ hoặc mặc định CON ĐƯỜNG ĐỘC LẬP)
   const [roomCode, setRoomCode] = useState(() => {
     try {
       const params = new URLSearchParams(window.location.search);
-      return (params.get('room') || 'VNR202').trim().toUpperCase();
+      return (params.get('room') || 'DOCLAP').trim().toUpperCase();
     } catch {
-      return 'VNR202';
+      return 'DOCLAP';
     }
   });
 
@@ -2315,7 +2315,7 @@ export default function App() {
       player_right_walk1: '/assets/sprites/player-right-walk1.png',
       player_right_walk2: '/assets/sprites/player-right-walk2.png',
 
-      // 8 Thành viên nhóm VNR202 (Đầy đủ sprite tùy biến)
+      // 8 Thành viên nhóm CON ĐƯỜNG ĐỘC LẬP (Đầy đủ sprite tùy biến)
       npcAnh: '/assets/sprites/npc-anh.png',
       npcBinh: '/assets/sprites/npc-binh.png',
       npcLinh: '/assets/sprites/npc-linh.png',
@@ -2332,7 +2332,7 @@ export default function App() {
       npcLan: '/assets/sprites/npc-lan.png',
       npcTrong: '/assets/sprites/npc-trong.png',
 
-      // 12 Nhân vật lịch sử VNR202
+      // 12 Nhân vật lịch sử CON ĐƯỜNG ĐỘC LẬP
       npcBacHo: '/assets/sprites/npc-bac-ho.png',
       npcVoNguyenGiap: '/assets/sprites/npc-vo-nguyen-giap.png',
       npcTranPhu: '/assets/sprites/npc-tran-phu.png',
@@ -2610,7 +2610,7 @@ export default function App() {
 
   // Sinh QR Code cho phòng chỉ định (mặc định mở https://conduongdoclap.vercel.app)
   const generateQrForRoom = useCallback((targetCode, customApi, customFe) => {
-    const code = (targetCode || roomCode || 'VNR202').trim().toUpperCase();
+    const code = (targetCode || roomCode || 'DOCLAP').trim().toUpperCase();
     const fe = (customFe || frontendDomain || 'https://conduongdoclap.vercel.app').trim().replace(/\/+$/, '');
     const api = customApi !== undefined ? customApi : backendUrl;
 
@@ -2654,16 +2654,30 @@ export default function App() {
     }
   }, [isHostMachine, roomCode, backendUrl, frontendDomain, getApiUrl, generateQrForRoom]);
 
-  // Đồng bộ nhịp tim (Heartbeat sync) người chơi lên phòng đua định kỳ 1.8s
+  // Đồng bộ nhịp tim (Heartbeat sync) tối ưu cho 60 người chơi (Non-overlapping + AbortController tránh nghẽn mạng)
   useEffect(() => {
+    let isCancelled = false;
+    let timeoutId = null;
+
     const syncWithRoom = async () => {
+      if (isCancelled) return;
+      // Nếu đang trên Vercel mà chưa cấu hình backendUrl thì bỏ qua request thừa để giao diện mượt tuyệt đối
+      const isRemoteStatic = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app') && !backendUrl;
+      if (isRemoteStatic) {
+        timeoutId = setTimeout(syncWithRoom, 3000);
+        return;
+      }
+
+      const controller = new AbortController();
+      const abortTimer = setTimeout(() => controller.abort(), 2400);
+
       try {
         const payload = {
           roomCode,
           playerId,
           playerName: (playerName || 'Hò Văn Tèn').trim(),
           currentMapId,
-          currentMapName: currentMap?.name || 'Chiến khu',
+          currentMapName: currentMap?.title?.replace('HÀNH TRÌNH: ', '') || 'Chiến khu',
           solvedCount: solvedIds.length,
           totalPieces: 8,
           isFinished: gameStatus === 'WON',
@@ -2672,17 +2686,21 @@ export default function App() {
 
         const res = await fetch(getApiUrl('/api/race/sync'), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          headers: {
+            'Content-Type': 'application/json',
+            'Bypass-Tunnel-Reminder': 'true'
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal
         });
 
-        if (res.ok) {
+        const contentType = res.headers.get('content-type') || '';
+        if (res.ok && contentType.includes('application/json')) {
           const data = await res.json();
-          if (data.success) {
-            setMyRankInRoom(data.rank || 1);
-            setTotalPlayersInRoom(data.totalPlayers || 1);
+          if (!isCancelled && data.success) {
+            setMyRankInRoom((prev) => (prev !== (data.rank || 1) ? (data.rank || 1) : prev));
+            setTotalPlayersInRoom((prev) => (prev !== (data.totalPlayers || 1) ? (data.totalPlayers || 1) : prev));
 
-            // Kiểm tra lệnh xuất phát từ Host (3 - 2 - 1 - GO)
             if (data.roomStatus === 'RACING' && data.startTime) {
               const diffSec = Math.floor((Date.now() - data.startTime) / 1000);
               setRaceElapsedSeconds(Math.max(0, diffSec));
@@ -2700,14 +2718,21 @@ export default function App() {
           }
         }
       } catch (e) {
-        // Chạy offline an toàn nếu không có server
+        // Chạy offline an toàn
+      } finally {
+        clearTimeout(abortTimer);
+        if (!isCancelled) {
+          timeoutId = setTimeout(syncWithRoom, 2000);
+        }
       }
     };
 
     syncWithRoom();
-    const interval = setInterval(syncWithRoom, 1800);
-    return () => clearInterval(interval);
-  }, [roomCode, playerId, playerName, currentMapId, currentMap, solvedIds.length, gameStatus, finishTimeMsRecord]);
+    return () => {
+      isCancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [roomCode, playerId, playerName, currentMapId, currentMap, solvedIds.length, gameStatus, finishTimeMsRecord, backendUrl, getApiUrl]);
 
   // Bộ đếm thời gian thi đấu tăng mỗi giây khi trạng thái RACING
   useEffect(() => {
@@ -2720,26 +2745,43 @@ export default function App() {
     return () => clearInterval(timer);
   }, [raceRoomData?.status, raceRoomData?.startTime]);
 
-  // Host định kỳ tải dữ liệu phòng cập nhật Leaderboard 60 người (mỗi 1.5s khi mở modal Host hoặc Projector)
+  // Host & Người chơi tải Leaderboard 60 người không chồng chéo (Non-overlapping poll)
   useEffect(() => {
     if (!showHostModal && !showProjectorMode && !showJoinModal) return;
+    let isCancelled = false;
+    let timerId = null;
 
     const fetchHostRoom = async () => {
+      if (isCancelled) return;
+      const controller = new AbortController();
+      const abortId = setTimeout(() => controller.abort(), 2400);
       try {
-        const res = await fetch(getApiUrl(`/api/race/room?code=${roomCode}`));
-        if (res.ok) {
+        const res = await fetch(getApiUrl(`/api/race/room?code=${roomCode}`), {
+          headers: { 'Bypass-Tunnel-Reminder': 'true' },
+          signal: controller.signal
+        });
+        const contentType = res.headers.get('content-type') || '';
+        if (res.ok && contentType.includes('application/json')) {
           const data = await res.json();
-          if (data.success && data.room) {
+          if (!isCancelled && data.success && data.room) {
             setRaceRoomData(data.room);
           }
         }
-      } catch (e) {}
+      } catch (e) {
+      } finally {
+        clearTimeout(abortId);
+        if (!isCancelled) {
+          timerId = setTimeout(fetchHostRoom, 1500);
+        }
+      }
     };
 
     fetchHostRoom();
-    const interval = setInterval(fetchHostRoom, 1500);
-    return () => clearInterval(interval);
-  }, [showHostModal, showProjectorMode, showJoinModal, roomCode]);
+    return () => {
+      isCancelled = true;
+      if (timerId) clearTimeout(timerId);
+    };
+  }, [showHostModal, showProjectorMode, showJoinModal, roomCode, getApiUrl]);
 
   // Host phát lệnh Bắt đầu cuộc đua
   const handleHostStartRace = async () => {
@@ -2800,7 +2842,7 @@ export default function App() {
 
   // Host tạo phòng mới
   const handleCreateNewRoom = async (newCode) => {
-    const code = (newCode || 'VNR202').trim().toUpperCase();
+    const code = (newCode || 'DOCLAP').trim().toUpperCase();
     if (!code) return;
     try {
       const res = await fetch(getApiUrl('/api/race/create'), {
@@ -3225,7 +3267,9 @@ export default function App() {
             posRef.current.x - lastDisplayPosRef.current.x,
             posRef.current.y - lastDisplayPosRef.current.y
           );
-          if (dPos >= 0.1) {
+          // Chỉ cập nhật React state khi di chuyển >= 0.42 ô hoặc khi vừa dừng lại để giảm 80% re-render
+          const isMovingNow = vx !== 0 || vy !== 0;
+          if (dPos >= 0.42 || (!isMovingNow && dPos >= 0.08)) {
             lastDisplayPosRef.current = { x: posRef.current.x, y: posRef.current.y };
             setPlayerDisplayPos({ x: posRef.current.x, y: posRef.current.y });
           }
@@ -3233,12 +3277,14 @@ export default function App() {
       }
 
       // ===================================================================
-      // 4. CANVAS RENDERING CHUẨN PIXEL-PERFECT VỚI ĐỒ HỌA TRUYTIMDANCHU
+      // 4. CANVAS RENDERING SIÊU MƯỢT 60FPS (CACHED DIMENSION + DPR 1.5)
       // ===================================================================
-      const rect = canvas.getBoundingClientRect();
-      const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
-      const targetW = Math.round(rect.width * dpr);
-      const targetH = Math.round(rect.height * dpr);
+      const cw = canvas.clientWidth || 1024;
+      const ch = canvas.clientHeight || 640;
+      const rect = { width: cw, height: ch };
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+      const targetW = Math.round(cw * dpr);
+      const targetH = Math.round(ch * dpr);
 
       if (canvas.width !== targetW || canvas.height !== targetH) {
         canvas.width = targetW;
@@ -3922,22 +3968,39 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#111c18] text-stone-100 flex flex-col font-sans selection:bg-amber-600 selection:text-black select-none">
       {/* ===================================================================
-          1. HEADER CHÍNH - MINH ĐĂNG · TRUY TÌM DÂN CHỦ (CHUẨN ẢNH MẪU)
+          1. THANH ĐIỀU HƯỚNG THỐNG NHẤT - CON ĐƯỜNG ĐỘC LẬP (1930 – 1945)
       =================================================================== */}
-      <header className="bg-[#182923] border-b border-[#263e35] px-3 sm:px-4 py-2 flex items-center justify-between shadow-lg z-30 flex-wrap gap-2">
-        <div className="flex items-center space-x-2 sm:space-x-3">
-          <span className="text-amber-400 font-black text-sm">✦</span>
-          <span className="text-xs sm:text-sm font-extrabold tracking-wider text-amber-300 uppercase hidden xl:inline">
-            MINH ĐĂNG · TRUY TÌM DÂN CHỦ
-          </span>
+      <header className="bg-gradient-to-r from-[#13241d] via-[#172b23] to-[#13241d] border-b border-amber-500/30 px-3 sm:px-5 py-2 flex items-center justify-between shadow-xl z-30 flex-wrap gap-2.5">
+        {/* CỤM TRÁI: THƯƠNG HIỆU "CON ĐƯỜNG ĐỘC LẬP" & HỒ SƠ CHIẾN SĨ */}
+        <div className="flex items-center space-x-2.5 sm:space-x-3.5">
+          <div className="flex items-center space-x-2.5">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-red-700 via-red-600 to-amber-600 border border-amber-300/80 flex items-center justify-center shadow-md shadow-red-950/60 flex-shrink-0">
+              <span className="text-yellow-300 text-sm font-black drop-shadow">★</span>
+            </div>
+            <div className="leading-tight">
+              <div className="flex items-center space-x-1.5">
+                <span className="text-xs sm:text-sm font-black tracking-wider text-amber-300 uppercase">
+                  CON ĐƯỜNG ĐỘC LẬP
+                </span>
+                <span className="text-[10px] font-mono font-extrabold bg-red-900/80 text-amber-200 border border-amber-400/40 px-1.5 py-0.5 rounded-md hidden sm:inline-block">
+                  1930 – 1945
+                </span>
+              </div>
+              <p className="text-[10px] text-emerald-300/80 font-medium hidden 2xl:block">
+                Hành trình Lịch sử Cách mạng giải phóng dân tộc
+              </p>
+            </div>
+          </div>
 
-          {/* Ô nhập đổi tên nhân vật (Mặc định: Hò Văn Tèn) ở góc trên bên trái */}
+          <div className="h-5 w-px bg-[#28463a] hidden sm:block" />
+
+          {/* Ô nhập đổi tên nhân vật (Mặc định: Hò Văn Tèn) */}
           <div
-            className="flex items-center space-x-1.5 bg-[#10201a] border border-amber-500/40 hover:border-amber-400 focus-within:border-amber-400 px-2 sm:px-2.5 py-1 rounded-xl shadow-inner transition group"
-            title="Đổi tên nhân vật của bạn (mặc định: Hò Văn Tèn)"
+            className="flex items-center space-x-1.5 bg-[#0e1c16] border border-amber-500/40 hover:border-amber-400 focus-within:border-amber-400 px-2.5 py-1 rounded-xl shadow-inner transition group"
+            title="Đổi tên chiến sĩ của bạn (mặc định: Hò Văn Tèn)"
           >
             <User className="w-3.5 h-3.5 text-amber-400 group-hover:scale-110 transition-transform flex-shrink-0" />
-            <span className="text-[11px] font-bold text-amber-300/80 hidden sm:inline">Tên:</span>
+            <span className="text-[11px] font-bold text-stone-400 hidden md:inline">Chiến sĩ:</span>
             <input
               type="text"
               value={playerName}
@@ -3946,46 +4009,80 @@ export default function App() {
                 const val = e.target.value;
                 setPlayerName(val);
                 try {
-                  localStorage.setItem('vnr202_player_name', val);
+                  localStorage.setItem('cddl_player_name', val);
                 } catch {}
               }}
               placeholder="Hò Văn Tèn"
-              className="bg-transparent border-none text-xs font-black text-amber-200 focus:outline-none rounded px-1 w-24 sm:w-32 py-0 placeholder-amber-200/50"
+              className="bg-transparent border-none text-xs font-black text-amber-200 focus:outline-none rounded px-1 w-24 sm:w-28 py-0 placeholder-amber-200/50"
             />
-            <Edit3 className="w-3 h-3 text-stone-400 group-hover:text-amber-300 transition-colors flex-shrink-0" />
+            <Edit3 className="w-3 h-3 text-stone-500 group-hover:text-amber-300 transition-colors flex-shrink-0" />
           </div>
         </div>
 
-        <div className="flex items-center space-x-1.5 sm:space-x-2 flex-wrap">
-          {/* Nút Tổ chức Đua Top (CHỈ HIỆN KHI TRUY CẬP TỪ LOCALHOST) */}
+        {/* CỤM GIỮA: TRUNG TÂM ĐUA TOP TRỰC TIẾP (TÍCH HỢP GỌN GÀNG TRÊN 1 THANH) */}
+        <div className="flex items-center bg-[#0d1914]/95 border border-[#28473b] rounded-xl px-2.5 py-1 space-x-2 sm:space-x-3 shadow-inner">
+          <div className="flex items-center space-x-1.5">
+            <Trophy className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
+            <span className="text-[11px] text-stone-400 hidden sm:inline">Phòng:</span>
+            <span className="font-mono text-xs font-black text-amber-300 bg-amber-950/70 border border-amber-500/40 px-1.5 py-0.5 rounded">
+              {roomCode}
+            </span>
+          </div>
+
+          <span className="text-stone-600">•</span>
+
+          <div className="text-xs flex items-center space-x-1" title="Thứ hạng hiện tại trong phòng">
+            <span className="text-stone-400 hidden md:inline">Hạng:</span>
+            <b className="text-amber-400 font-black">#{myRankInRoom}</b>
+            <span className="text-stone-400 text-[11px]">/{totalPlayersInRoom}</span>
+          </div>
+
+          <span className="text-stone-600 hidden sm:inline">•</span>
+
+          <div className="hidden sm:flex items-center space-x-1 text-emerald-400 font-mono text-xs font-bold">
+            <Timer className="w-3.5 h-3.5 text-emerald-400" />
+            <span>{formatRaceTime(raceElapsedSeconds)}</span>
+          </div>
+
+          {raceRoomData?.status === 'RACING' && (
+            <span className="hidden lg:inline-flex items-center gap-1 text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-bold">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+              Đang đua
+            </span>
+          )}
+
           {isHostMachine ? (
             <button
               onClick={() => setShowHostModal(true)}
-              className="flex items-center space-x-1.5 px-3 py-1 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-stone-950 font-black rounded-lg text-xs shadow-lg transition-transform active:scale-95 ring-2 ring-amber-300/60 animate-pulse"
-              title="Dành riêng cho máy chủ Localhost: Tạo phòng đua top 60 người, phát lệnh và sinh mã QR"
+              className="flex items-center space-x-1 px-2.5 py-1 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-stone-950 font-black rounded-lg text-[11px] shadow transition active:scale-95"
+              title="Mở Bảng Điều Hành Phòng Đua 60 Người (Chạy trên máy Host của bạn)"
             >
-              <Trophy className="w-4 h-4 text-stone-950" />
-              <span>TỔ CHỨC ĐUA TOP (HOST)</span>
+              <QrCode className="w-3.5 h-3.5 text-stone-950" />
+              <span>ĐIỀU HÀNH HOST</span>
             </button>
           ) : (
             <button
               onClick={() => setShowJoinModal(true)}
-              className="flex items-center space-x-1.5 px-2.5 py-1 bg-[#152a22] hover:bg-[#1e382e] border border-amber-400/40 rounded-lg text-xs font-bold text-amber-300 shadow transition"
-              title="Xem bảng xếp hạng cuộc đua"
+              className="flex items-center space-x-1 px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-200 font-bold rounded-lg text-[11px] transition"
+              title="Xem Bảng Xếp Hạng & Cấu hình kết nối Máy chủ"
             >
-              <Trophy className="w-3.5 h-3.5 text-amber-400" />
-              <span>Phòng: {roomCode} (#{myRankInRoom}/{totalPlayersInRoom})</span>
+              <span>BXH Phòng</span>
             </button>
           )}
-          {/* Chỉ số Nguy cơ bị Mật thám Pháp phát hiện */}
+        </div>
+
+        {/* CỤM PHẢI: CÔNG CỤ CHIẾN THUẬT & ĐIỀU KHIỂN */}
+        <div className="flex items-center space-x-1.5 sm:space-x-2 flex-wrap">
+          {/* Cảnh báo Mật thám Pháp */}
           <div
-            className={`flex items-center space-x-1.5 px-3 py-1 rounded-lg border text-xs transition-colors ${
+            className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-xl border text-xs transition-colors ${
               isPatrolAlerting
                 ? 'bg-red-950/90 border-red-500 animate-pulse text-red-200 ring-2 ring-red-500/50'
                 : threatLevel > 50
                 ? 'bg-[#241712] border-amber-600/70 text-amber-300'
-                : 'bg-[#111f1a] border-[#274037] text-stone-300'
+                : 'bg-[#0e1c16] border-[#264237] text-stone-300'
             }`}
+            title="Mức độ cảnh giác của Mật thám tuần tra"
           >
             <ShieldAlert
               className={`w-3.5 h-3.5 ${
@@ -3993,13 +4090,10 @@ export default function App() {
                   ? 'text-red-400 animate-bounce'
                   : threatLevel >= 35
                   ? 'text-amber-400'
-                  : 'text-stone-400'
+                  : 'text-emerald-400'
               }`}
             />
-            <span className="font-medium hidden sm:inline">
-              {isPatrolAlerting ? '⚠️ BỊ PHÁT HIỆN:' : 'Bị phát hiện:'}
-            </span>
-            <span className="font-medium sm:hidden">
+            <span className="font-medium hidden xl:inline">
               {isPatrolAlerting ? '⚠️ BỊ LỘ:' : 'Mật thám:'}
             </span>
             <b
@@ -4015,34 +4109,31 @@ export default function App() {
             >
               {Math.round(threatLevel)}%
             </b>
-            {!isPatrolAlerting && threatLevel > 0 && (
-              <span className="text-[10px] text-emerald-400 font-bold hidden md:inline ml-0.5">
-                (An toàn ↓)
-              </span>
-            )}
           </div>
 
           {/* Sơ đồ 6 Chiến khu */}
           <button
             onClick={() => setShowWorldMapModal(true)}
-            className="flex items-center space-x-1 px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 rounded text-xs font-bold text-amber-300 transition shadow"
-            title="Mở Sơ đồ 6 Chiến khu [M]"
+            className="flex items-center space-x-1 px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 rounded-xl text-xs font-bold text-amber-300 transition shadow"
+            title="Mở Sơ đồ 6 Chiến khu Cách mạng [M]"
           >
             <MapIcon className="w-3.5 h-3.5 text-amber-400" />
             <span>6 Chiến khu [M]</span>
           </button>
 
-          {/* Sổ tay văn kiện VNR202 */}
+          {/* Sổ tay 8 Văn kiện Lịch sử */}
           <button
             onClick={() => setShowDirectivesModal(true)}
-            className="flex items-center space-x-1 px-2.5 py-1 bg-[#152a22] hover:bg-[#1e392e] border border-[#264438] rounded text-xs font-semibold text-amber-300 transition"
+            className="flex items-center space-x-1 px-2.5 py-1 bg-[#13261e] hover:bg-[#1b352a] border border-[#28483b] rounded-xl text-xs font-semibold text-amber-200 transition"
+            title="Sổ tay 8 Văn kiện Lịch sử Cách mạng (1930 – 1945)"
           >
-            <Scroll className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Văn kiện ({collectedDirectives.length}/8)</span>
+            <Scroll className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden md:inline">Văn kiện ({collectedDirectives.length}/8)</span>
+            <span className="md:hidden">{collectedDirectives.length}/8</span>
           </button>
 
-          {/* Điều chỉnh độ to nhỏ (Zoom) */}
-          <div className="flex items-center bg-[#152a22] border border-[#264438] rounded px-1.5 py-0.5 space-x-1" title="Phóng to / Thu nhỏ nhân vật [+ / -]">
+          {/* Điều chỉnh độ phóng (Zoom) */}
+          <div className="hidden sm:flex items-center bg-[#0e1c16] border border-[#264237] rounded-xl px-1.5 py-0.5 space-x-1" title="Thu phóng bản đồ [+ / -]">
             <button
               onClick={() => setZoomLevel((z) => Math.max(0.9, parseFloat((z - 0.1).toFixed(2))))}
               className="p-1 text-stone-300 hover:text-amber-400 transition"
@@ -4069,83 +4160,31 @@ export default function App() {
               setSoundOn(!soundOn);
               SoundEngine.enabled = !soundOn;
             }}
-            className="p-1.5 bg-[#152a22] hover:bg-[#1e392e] border border-[#264438] rounded text-stone-300 transition"
+            className="p-1.5 bg-[#0e1c16] hover:bg-[#193127] border border-[#264237] rounded-xl text-stone-300 transition"
+            title="Bật / Tắt âm thanh"
           >
             {soundOn ? <Volume2 className="w-4 h-4 text-amber-400" /> : <VolumeX className="w-4 h-4 text-stone-500" />}
           </button>
 
-          {/* Toàn màn hình */}
+          {/* Mở rộng khung hình */}
           <button
             onClick={() => setIsExpandedScreen(!isExpandedScreen)}
-            className="p-1.5 bg-[#152a22] hover:bg-[#1e392e] border border-[#264438] rounded text-stone-300 transition"
+            className="p-1.5 bg-[#0e1c16] hover:bg-[#193127] border border-[#264237] rounded-xl text-stone-300 transition"
+            title="Mở rộng / Thu gọn màn hình"
           >
             {isExpandedScreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4 text-amber-400" />}
           </button>
 
-          {/* Reset */}
+          {/* Chơi lại từ đầu */}
           <button
             onClick={handleResetGame}
-            className="p-1.5 bg-[#152a22] hover:bg-[#1e392e] border border-[#264438] rounded text-stone-300 transition"
+            className="p-1.5 bg-[#0e1c16] hover:bg-red-950/60 border border-[#264237] hover:border-red-500/40 rounded-xl text-stone-300 transition"
+            title="Khởi động lại hành trình"
           >
             <RotateCcw className="w-4 h-4 text-red-400" />
           </button>
         </div>
       </header>
-
-      {/* ===================================================================
-          THANH TRẠNG THÁI CUỘC ĐUA (RACE STATUS HUD BAR)
-      =================================================================== */}
-      <div className="bg-[#12221b] border-b border-[#233a30] px-4 py-1.5 flex items-center justify-between text-xs text-stone-300 flex-wrap gap-2 z-20">
-        <div className="flex items-center space-x-2.5 sm:space-x-3.5 flex-wrap">
-          <div className="flex items-center space-x-1.5 text-amber-300 font-bold">
-            <Trophy className="w-3.5 h-3.5 text-yellow-400" />
-            <span>Phòng Đua: <b className="font-mono text-amber-200 bg-amber-950/60 border border-amber-500/40 px-1.5 py-0.5 rounded">{roomCode}</b></span>
-          </div>
-          <span className="text-stone-600 hidden sm:inline">•</span>
-          <div className="text-stone-300">
-            Hạng của bạn: <b className="text-amber-400 font-extrabold text-sm">#{myRankInRoom}</b> <span className="text-stone-400 text-[11px]">/ {totalPlayersInRoom} thí sinh</span>
-          </div>
-          <span className="text-stone-600 hidden sm:inline">•</span>
-          <div className="flex items-center space-x-1 text-emerald-400 font-mono font-bold">
-            <Timer className="w-3.5 h-3.5 text-emerald-400" />
-            <span>{formatRaceTime(raceElapsedSeconds)}</span>
-          </div>
-        </div>
-
-        <div className="flex items-center space-x-2">
-          {raceRoomData?.status === 'WAITING' ? (
-            <span className="text-[11px] bg-yellow-500/20 text-yellow-300 border border-yellow-500/30 px-2 py-0.5 rounded-full animate-pulse flex items-center gap-1">
-              <span>⏳</span> Chờ Host phát lệnh Bắt Đầu...
-            </span>
-          ) : raceRoomData?.status === 'RACING' ? (
-            <span className="text-[11px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
-              <span className="animate-ping inline-block w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-              Đang thi đấu trực tiếp!
-            </span>
-          ) : (
-            <span className="text-[11px] bg-stone-700/40 text-stone-300 px-2 py-0.5 rounded-full">
-              Cuộc đua kết thúc
-            </span>
-          )}
-
-          {isHostMachine ? (
-            <button
-              onClick={() => setShowHostModal(true)}
-              className="text-[11px] bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-400/40 px-2.5 py-0.5 rounded transition flex items-center gap-1 font-bold"
-            >
-              <QrCode className="w-3 h-3 text-amber-400" />
-              <span>Bảng Điều Hành Host</span>
-            </button>
-          ) : (
-            <button
-              onClick={() => setShowJoinModal(true)}
-              className="text-[11px] bg-stone-800 hover:bg-stone-700 text-stone-300 border border-stone-600 px-2.5 py-0.5 rounded transition font-bold"
-            >
-              Xem BXH Phòng
-            </button>
-          )}
-        </div>
-      </div>
 
       {/* ===================================================================
           2. VIEWPORT CHƠI CHÍNH
@@ -4403,7 +4442,7 @@ export default function App() {
       </main>
 
       {/* ===================================================================
-          3. HỘP THOẠI ĐỐI THOẠI & ĐA CÂU HỎI VNR202 (MODAL)
+          3. HỘP THOẠI ĐỐI THOẠI & ĐA CÂU HỎI CON ĐƯỜNG ĐỘC LẬP (MODAL)
       =================================================================== */}
       {activeNpc && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
@@ -4565,7 +4604,7 @@ export default function App() {
             <div className="flex items-center space-x-2 text-amber-400 mb-1">
               <Scroll className="w-5 h-5" />
               <h3 className="text-base font-extrabold uppercase tracking-wide">
-                SỔ TAY 8 VĂN KIỆN THEN CHỐT VNR202 (1930 — 1945)
+                SỔ TAY 8 VĂN KIỆN LỊCH SỬ CÁCH MẠNG (1930 — 1945)
               </h3>
             </div>
             <p className="text-xs text-stone-400 mb-4">
@@ -4573,7 +4612,7 @@ export default function App() {
             </p>
 
             <div className="space-y-3 overflow-y-auto pr-1 flex-1">
-              {VNR202_DIRECTIVES.map((d) => {
+              {HISTORICAL_DIRECTIVES.map((d) => {
                 const isUnlocked = collectedDirectives.includes(d.id);
                 return (
                   <div
@@ -4627,7 +4666,7 @@ export default function App() {
             <div className="flex items-center space-x-2 text-amber-400 mb-1">
               <MapIcon className="w-5 h-5" />
               <h3 className="text-base font-extrabold uppercase tracking-wide">
-                SƠ ĐỒ 6 CHIẾN KHU LỊCH SỬ VĂN HÓA VNR202
+                SƠ ĐỒ 6 CHIẾN KHU CON ĐƯỜNG ĐỘC LẬP (1930 — 1945)
               </h3>
             </div>
             <p className="text-xs text-stone-400 mb-4">
@@ -4692,7 +4731,7 @@ export default function App() {
             </button>
             <div className="flex items-center space-x-2 text-amber-400 mb-2">
               <HelpCircle className="w-5 h-5" />
-              <h3 className="text-base font-extrabold uppercase">HƯỚNG DẪN CHƠI GAME VNR202</h3>
+              <h3 className="text-base font-extrabold uppercase">HƯỚNG DẪN HÀNH TRÌNH CON ĐƯỜNG ĐỘC LẬP</h3>
             </div>
             <ul className="text-xs space-y-2.5 text-stone-300 leading-relaxed">
               <li className="flex items-start space-x-2">
@@ -4855,7 +4894,7 @@ export default function App() {
               {relicModal.isDropAlert ? '⭐' : '🏆'}
             </div>
             <h3 className="text-base sm:text-lg font-black text-amber-300 uppercase tracking-wide">
-              {relicModal.title || 'KỶ VẬT LỊCH SỬ VNR202'}
+              {relicModal.title || 'KỶ VẬT LỊCH SỬ CÁCH MẠNG'}
             </h3>
             <div className="text-sm font-bold text-amber-400 mt-1">
               [ {relicModal.name} ]
@@ -4958,7 +4997,7 @@ export default function App() {
               {raceCountdown}
             </h1>
             <p className="text-stone-300 font-bold mt-3 text-sm uppercase">
-              Giải Đua Top Lịch Sử Đảng VNR202 (1930 - 1945)
+              Giải Đua Top Con Đường Độc Lập (1930 - 1945)
             </p>
           </div>
         </div>
@@ -4978,7 +5017,7 @@ export default function App() {
                 </div>
                 <div>
                   <h2 className="text-lg sm:text-xl font-black text-amber-300 uppercase tracking-wide flex items-center gap-2">
-                    <span>TỔ CHỨC PHÒNG ĐUA TOP VNR202</span>
+                    <span>TỔ CHỨC PHÒNG ĐUA TOP CON ĐƯỜNG ĐỘC LẬP</span>
                     <span className="text-[11px] bg-amber-500 text-stone-950 font-black px-2 py-0.5 rounded-full">
                       TỐI ĐA 60 NGƯỜI
                     </span>
@@ -5071,7 +5110,7 @@ export default function App() {
                       onChange={(e) => {
                         const val = e.target.value;
                         setBackendUrl(val);
-                        localStorage.setItem('vnr202_backend_url', val);
+                        localStorage.setItem('cddl_backend_url', val);
                         generateQrForRoom(roomCode, val, frontendDomain);
                       }}
                       placeholder="http://localhost:4000 hoặc link HTTPS Tunnel..."
@@ -5299,7 +5338,7 @@ export default function App() {
               <span className="text-3xl">⭐</span>
               <div>
                 <h1 className="text-2xl sm:text-3xl font-black text-amber-300 uppercase tracking-widest flex items-center gap-2">
-                  <span>GIẢI ĐUA TOP LỊCH SỬ ĐẢNG VNR202</span>
+                  <span>GIẢI ĐUA TOP CON ĐƯỜNG ĐỘC LẬP (1930 – 1945)</span>
                   <span className="text-sm bg-amber-500 text-stone-950 px-2.5 py-0.5 rounded-full font-black">
                     PHÒNG {roomCode}
                   </span>
@@ -5505,16 +5544,41 @@ export default function App() {
               ))}
             </div>
 
-            {/* Trạng thái kết nối Máy chủ */}
-            <div className="mt-3 p-2 bg-[#0d1814] rounded-xl border border-[#20362c] text-left">
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="font-bold text-amber-300">Máy chủ Backend (Host PC):</span>
-                <span className="font-mono text-emerald-400 truncate max-w-[200px]" title={backendUrl || 'Chạy nội bộ'}>
-                  {backendUrl || 'Mặc định (Local)'}
-                </span>
+            {/* Cấu hình Mã Phòng & Kết nối Máy chủ Xử lý JS (Host PC) */}
+            <div className="mt-3 p-3 bg-[#0d1814] rounded-xl border border-[#20362c] text-left space-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div>
+                  <label className="text-[10px] font-bold text-amber-300 block mb-0.5">Mã phòng đua:</label>
+                  <input
+                    type="text"
+                    value={roomCode}
+                    maxLength={10}
+                    onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+                    placeholder="DOCLAP"
+                    className="w-full bg-[#12221b] border border-[#284639] text-xs font-mono font-bold text-amber-200 px-2 py-1 rounded focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-[10px] font-bold text-emerald-300 block mb-0.5">
+                    Máy chủ xử lý Backend (PC của Host):
+                  </label>
+                  <input
+                    type="text"
+                    value={backendUrl}
+                    onChange={(e) => {
+                      const val = e.target.value.trim();
+                      setBackendUrl(val);
+                      try {
+                        localStorage.setItem('cddl_backend_url', val);
+                      } catch {}
+                    }}
+                    placeholder="http://localhost:4000 hoặc link HTTPS Tunnel..."
+                    className="w-full bg-[#12221b] border border-[#284639] text-xs font-mono text-emerald-300 px-2 py-1 rounded focus:outline-none focus:border-emerald-400"
+                  />
+                </div>
               </div>
-              <p className="text-[10px] text-stone-400 mt-0.5">
-                ✦ Giao diện tải từ Vercel, dữ liệu thi đấu đồng bộ trực tiếp về máy chủ của Host.
+              <p className="text-[10px] text-stone-400">
+                ✦ Giao diện hiển thị qua Vercel, toàn bộ tính toán phòng đua 60 người chạy trực tiếp tại máy chủ của Host.
               </p>
             </div>
 

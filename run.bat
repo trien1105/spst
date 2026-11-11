@@ -1,11 +1,11 @@
 @echo off
 setlocal
-title CON DUONG DOC LAP (1930 - 1945) - VNR202
+title CON DUONG DOC LAP (1930 - 1945)
 color 0A
 
 echo ======================================================================
-echo          CON DUONG DOC LAP (1930 - 1945) - GAME VNR202
-echo            HOC PHAN: LICH SU DANG CONG SAN VIET NAM
+echo             CON DUONG DOC LAP (1930 - 1945)
+echo        HANH TRINH LICH SU CACH MANG VIET NAM
 echo ======================================================================
 echo.
 
@@ -29,7 +29,7 @@ if %errorlevel% neq 0 goto :install_fail
 
 :start_game
 echo.
-echo [KIEM TRA VA DỌN DEP PORT 5173...]
+echo [KIEM TRA VA DON DEP PORT 5173...]
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":5173" ^| findstr "LISTENING"') do (
     taskkill /F /PID %%a >nul 2>nul
 )
