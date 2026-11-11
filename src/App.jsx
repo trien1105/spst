@@ -2213,6 +2213,7 @@ export default function App() {
       setAdminLoginError('');
       setAdminUserInp('');
       setAdminPassInp('');
+      if (!roomCode) setRoomCode('DOCLAP');
       setShowAdminLoginModal(false);
       setShowHostModal(true);
       SoundEngine.victory();
@@ -2249,15 +2250,34 @@ export default function App() {
     return `${base}${ep}`;
   }, [backendUrl]);
 
-  // 4. Mã phòng thi đấu (tự động nhận từ ?room=XYZ hoặc mặc định CON ĐƯỜNG ĐỘC LẬP)
+  // 4. Mã phòng thi đấu: Khi mới vào web sẽ CHƯA ở trong phòng nào (''), trừ khi quét QR có ?room=XYZ
   const [roomCode, setRoomCode] = useState(() => {
     try {
       const params = new URLSearchParams(window.location.search);
-      return (params.get('room') || 'DOCLAP').trim().toUpperCase();
+      const fromQr = params.get('room');
+      return fromQr ? fromQr.trim().toUpperCase() : '';
     } catch {
-      return 'DOCLAP';
+      return '';
     }
   });
+  const [joinCodeInput, setJoinCodeInput] = useState('');
+
+  // Hàm xử lý khi người chơi nhập mã code trên thanh Navbar và bấm "Vào Phòng"
+  const handlePlayerJoinByCode = (e) => {
+    if (e) e.preventDefault();
+    const cleanCode = (joinCodeInput || '').trim().toUpperCase();
+    if (!cleanCode) return;
+    SoundEngine.interact();
+    setRoomCode(cleanCode);
+    setJoinCodeInput('');
+  };
+
+  // Hàm rời phòng hiện tại để nhập mã phòng khác
+  const handleLeaveRoom = () => {
+    SoundEngine.interact();
+    setRoomCode('');
+    setRaceRoomData(null);
+  };
 
   // 5. Trạng thái phòng đua & Bảng xếp hạng
   const [raceRoomData, setRaceRoomData] = useState(null);
@@ -2710,6 +2730,21 @@ export default function App() {
       const abortTimer = setTimeout(() => controller.abort(), 2200);
 
       try {
+        // Nếu người chơi CHƯA nhập mã phòng và CHƯA quét QR: chỉ kiểm tra kết nối Backend chứ chưa đẩy vào phòng đua
+        if (!roomCode || !roomCode.trim()) {
+          const pingRes = await fetch(getApiUrl('/api/race/info'), {
+            headers: { 'Bypass-Tunnel-Reminder': 'true' },
+            signal: controller.signal
+          });
+          const ct = pingRes.headers.get('content-type') || '';
+          if (pingRes.ok && ct.includes('application/json')) {
+            if (!isCancelled) setBackendConnected('ONLINE');
+          } else {
+            if (!isCancelled) setBackendConnected('OFFLINE');
+          }
+          return;
+        }
+
         const payload = {
           roomCode,
           playerId,
@@ -2801,7 +2836,7 @@ export default function App() {
       const controller = new AbortController();
       const abortId = setTimeout(() => controller.abort(), 2400);
       try {
-        const res = await fetch(getApiUrl(`/api/race/room?code=${roomCode}`), {
+        const res = await fetch(getApiUrl(`/api/race/room?code=${roomCode || 'DOCLAP'}`), {
           headers: { 'Bypass-Tunnel-Reminder': 'true' },
           signal: controller.signal
         });
@@ -4114,65 +4149,93 @@ export default function App() {
           </div>
 
           <span className="text-amber-500/40">•</span>
-          <div className="flex items-center space-x-1.5">
-            <Trophy className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
-            <span className="text-[11px] text-stone-400 hidden sm:inline">Phòng:</span>
-            <span className="font-mono text-xs font-black text-amber-300 bg-amber-950/70 border border-amber-500/40 px-1.5 py-0.5 rounded">
-              {roomCode}
-            </span>
-          </div>
 
-          <span className="text-stone-600">•</span>
+          {/* NẾU CHƯA VÀO PHÒNG: HIỆN Ô NHẬP CODE PHÒNG ĐUA */}
+          {!roomCode ? (
+            <form onSubmit={handlePlayerJoinByCode} className="flex items-center space-x-1.5">
+              <Trophy className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 hidden sm:inline" />
+              <input
+                type="text"
+                value={joinCodeInput}
+                maxLength={10}
+                onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
+                placeholder="Nhập mã phòng..."
+                className="bg-[#0e1c16] border border-amber-500/50 focus:border-amber-400 text-xs font-mono font-bold text-amber-200 placeholder-stone-400 px-2.5 py-1 rounded-lg w-32 sm:w-36 focus:outline-none"
+              />
+              <button
+                type="submit"
+                className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-stone-950 font-black rounded-lg text-[11px] uppercase shadow transition active:scale-95"
+              >
+                Vào Phòng
+              </button>
+            </form>
+          ) : (
+            /* NẾU ĐÃ NHẬP CODE HOẶC QUÉT QR: HIỆN ĐANG Ở TRONG PHÒNG + MÃ CODE */
+            <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-1.5 bg-emerald-950/60 border border-emerald-500/40 px-2 py-0.5 rounded-lg">
+                <Trophy className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
+                <span className="text-[11px] text-emerald-300 font-bold hidden sm:inline">Trong phòng:</span>
+                <span className="font-mono text-xs font-black text-amber-300">
+                  {roomCode}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleLeaveRoom}
+                  className="text-[10px] text-stone-400 hover:text-red-400 ml-1 font-bold"
+                  title="Rời phòng / Đổi mã phòng khác"
+                >
+                  ✕
+                </button>
+              </div>
 
-          <div className="text-xs flex items-center space-x-1" title="Thứ hạng hiện tại trong phòng">
-            <span className="text-stone-400 hidden md:inline">Hạng:</span>
-            <b className="text-amber-400 font-black">#{myRankInRoom}</b>
-            <span className="text-stone-400 text-[11px]">/{totalPlayersInRoom}</span>
-          </div>
+              <div className="text-xs flex items-center space-x-1" title="Thứ hạng hiện tại trong phòng">
+                <span className="text-stone-400 hidden md:inline">Hạng:</span>
+                <b className="text-amber-400 font-black">#{myRankInRoom}</b>
+                <span className="text-stone-400 text-[11px]">/{totalPlayersInRoom}</span>
+              </div>
 
-          <span className="text-stone-600 hidden sm:inline">•</span>
+              <div className="hidden sm:flex items-center space-x-1 text-emerald-400 font-mono text-xs font-bold">
+                <Timer className="w-3.5 h-3.5 text-emerald-400" />
+                <span>{formatRaceTime(raceElapsedSeconds)}</span>
+              </div>
 
-          <div className="hidden sm:flex items-center space-x-1 text-emerald-400 font-mono text-xs font-bold">
-            <Timer className="w-3.5 h-3.5 text-emerald-400" />
-            <span>{formatRaceTime(raceElapsedSeconds)}</span>
-          </div>
-
-          {raceRoomData?.status === 'RACING' && (
-            <span className="hidden lg:inline-flex items-center gap-1 text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-bold">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-              Đang đua
-            </span>
+              <button
+                type="button"
+                onClick={() => setShowJoinModal(true)}
+                className="flex items-center space-x-1 px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-200 font-bold rounded-lg text-[11px] transition"
+                title="Xem Bảng Xếp Hạng Phòng Đua"
+              >
+                <span>BXH Phòng</span>
+              </button>
+            </div>
           )}
 
+          {/* NÚT DÀNH CHO HOST / ADMIN */}
           {isHostMachine ? (
             <button
-              onClick={() => setShowHostModal(true)}
+              type="button"
+              onClick={() => {
+                if (!roomCode) setRoomCode('DOCLAP');
+                setShowHostModal(true);
+              }}
               className="flex items-center space-x-1 px-2.5 py-1 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-stone-950 font-black rounded-lg text-[11px] shadow transition active:scale-95"
-              title="Mở Bảng Điều Hành Phòng Đua 60 Người (Quyền Host Admin)"
+              title="Mở Bảng Điều Hành Phòng Đua (Quyền Host Admin)"
             >
               <QrCode className="w-3.5 h-3.5 text-stone-950" />
               <span>👑 ĐIỀU HÀNH HOST</span>
             </button>
           ) : (
-            <div className="flex items-center space-x-1.5">
-              <button
-                onClick={() => setShowJoinModal(true)}
-                className="flex items-center space-x-1 px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-200 font-bold rounded-lg text-[11px] transition"
-                title="Xem Bảng Xếp Hạng & Cấu hình kết nối Máy chủ"
-              >
-                <span>BXH Phòng</span>
-              </button>
-              <button
-                onClick={() => {
-                  setAdminLoginError('');
-                  setShowAdminLoginModal(true);
-                }}
-                className="flex items-center space-x-1 px-2 py-1 bg-red-950/80 hover:bg-red-900 border border-amber-500/40 text-amber-300 font-bold rounded-lg text-[11px] transition"
-                title="Đăng nhập tài khoản Admin để Tổ chức Phòng Đua (Host)"
-              >
-                <span>🔑 Host</span>
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setAdminLoginError('');
+                setShowAdminLoginModal(true);
+              }}
+              className="flex items-center space-x-1 px-2 py-1 bg-red-950/80 hover:bg-red-900 border border-amber-500/40 text-amber-300 font-bold rounded-lg text-[11px] transition"
+              title="Đăng nhập tài khoản Admin để Tổ chức Phòng Đua (Host)"
+            >
+              <span>🔑 Host</span>
+            </button>
           )}
         </div>
 
