@@ -2183,12 +2183,52 @@ export default function App() {
   const [backendConnected, setBackendConnected] = useState('CHECKING');
   const [retryTrigger, setRetryTrigger] = useState(0);
 
-  // 3. Kiểm tra quyền Host: CHỈ DUY NHẤT máy chạy Local (localhost / 127.0.0.1) mới có quyền Điều Hành Host
+  // 3. Tài khoản Admin Host (tk: admin / mk: trienngu) hoặc chạy trực tiếp trên Localhost
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(() => {
+    try {
+      return sessionStorage.getItem('cddl_admin_auth') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [showAdminLoginModal, setShowAdminLoginModal] = useState(false);
+  const [adminUserInp, setAdminUserInp] = useState('');
+  const [adminPassInp, setAdminPassInp] = useState('');
+  const [adminLoginError, setAdminLoginError] = useState('');
+
   const isHostMachine = useMemo(() => {
+    if (isAdminAuthenticated) return true;
     if (typeof window === 'undefined') return false;
     const h = window.location.hostname;
     return h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || h === '0.0.0.0';
-  }, []);
+  }, [isAdminAuthenticated]);
+
+  const handleAdminLoginSubmit = (e) => {
+    if (e) e.preventDefault();
+    if (adminUserInp.trim().toLowerCase() === 'admin' && adminPassInp === 'trienngu') {
+      setIsAdminAuthenticated(true);
+      try {
+        sessionStorage.setItem('cddl_admin_auth', '1');
+      } catch {}
+      setAdminLoginError('');
+      setAdminUserInp('');
+      setAdminPassInp('');
+      setShowAdminLoginModal(false);
+      setShowHostModal(true);
+      SoundEngine.victory();
+    } else {
+      SoundEngine.wrong();
+      setAdminLoginError('Sai tài khoản hoặc mật khẩu Quản trị viên (Host)!');
+    }
+  };
+
+  const handleAdminLogout = () => {
+    setIsAdminAuthenticated(false);
+    try {
+      sessionStorage.removeItem('cddl_admin_auth');
+    } catch {}
+    setShowHostModal(false);
+  };
 
   // 3.2. Tên miền Giao diện Frontend (https://conduongdoclap.vercel.app)
   const [frontendDomain, setFrontendDomain] = useState(() => {
@@ -2915,9 +2955,13 @@ export default function App() {
     }
   };
 
-  // Lắng nghe bàn phím
+  // Lắng nghe bàn phím (Bỏ qua khi người chơi đang gõ trong ô input)
   useEffect(() => {
     const handleKeyDown = (e) => {
+      const tag = e.target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target?.isContentEditable) {
+        return;
+      }
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
         e.preventDefault();
       }
@@ -4084,19 +4128,31 @@ export default function App() {
             <button
               onClick={() => setShowHostModal(true)}
               className="flex items-center space-x-1 px-2.5 py-1 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-stone-950 font-black rounded-lg text-[11px] shadow transition active:scale-95"
-              title="Mở Bảng Điều Hành Phòng Đua 60 Người (Chạy trên máy Host của bạn)"
+              title="Mở Bảng Điều Hành Phòng Đua 60 Người (Quyền Host Admin)"
             >
               <QrCode className="w-3.5 h-3.5 text-stone-950" />
-              <span>ĐIỀU HÀNH HOST</span>
+              <span>👑 ĐIỀU HÀNH HOST</span>
             </button>
           ) : (
-            <button
-              onClick={() => setShowJoinModal(true)}
-              className="flex items-center space-x-1 px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-200 font-bold rounded-lg text-[11px] transition"
-              title="Xem Bảng Xếp Hạng & Cấu hình kết nối Máy chủ"
-            >
-              <span>BXH Phòng</span>
-            </button>
+            <div className="flex items-center space-x-1.5">
+              <button
+                onClick={() => setShowJoinModal(true)}
+                className="flex items-center space-x-1 px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-200 font-bold rounded-lg text-[11px] transition"
+                title="Xem Bảng Xếp Hạng & Cấu hình kết nối Máy chủ"
+              >
+                <span>BXH Phòng</span>
+              </button>
+              <button
+                onClick={() => {
+                  setAdminLoginError('');
+                  setShowAdminLoginModal(true);
+                }}
+                className="flex items-center space-x-1 px-2 py-1 bg-red-950/80 hover:bg-red-900 border border-amber-500/40 text-amber-300 font-bold rounded-lg text-[11px] transition"
+                title="Đăng nhập tài khoản Admin để Tổ chức Phòng Đua (Host)"
+              >
+                <span>🔑 Host</span>
+              </button>
+            </div>
           )}
         </div>
 
@@ -5066,6 +5122,15 @@ export default function App() {
                   <Maximize2 className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Chế Độ Máy Chiếu</span>
                 </button>
+                {isAdminAuthenticated && (
+                  <button
+                    onClick={handleAdminLogout}
+                    className="px-2.5 py-1.5 bg-red-950/80 hover:bg-red-900 border border-red-500/40 text-red-200 font-bold text-xs rounded-xl transition"
+                    title="Đăng xuất quyền Admin Host"
+                  >
+                    Đăng xuất
+                  </button>
+                )}
                 <button
                   onClick={() => setShowHostModal(false)}
                   className="text-stone-400 hover:text-white transition p-1.5 bg-[#172b24] hover:bg-[#203a31] rounded-xl text-lg font-bold"
@@ -5618,6 +5683,75 @@ export default function App() {
               Đóng
             </button>
           </div>
+        </div>
+      )}
+
+      {/* ===================================================================
+          12B. MODAL ĐĂNG NHẬP TÀI KHOẢN ADMIN HOST (TK: admin / MK: trienngu)
+      =================================================================== */}
+      {showAdminLoginModal && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+          <form
+            onSubmit={handleAdminLoginSubmit}
+            className="bg-gradient-to-b from-[#240a0a] to-[#121e19] border-2 border-amber-400/80 rounded-3xl max-w-sm w-full p-6 shadow-2xl relative text-stone-100"
+          >
+            <button
+              type="button"
+              onClick={() => setShowAdminLoginModal(false)}
+              className="absolute top-4 right-4 text-stone-400 hover:text-white p-1 bg-black/40 rounded-lg"
+            >
+              ✕
+            </button>
+
+            <div className="text-center mb-4">
+              <div className="w-12 h-12 mx-auto mb-2 rounded-2xl bg-amber-500/20 border border-amber-400 flex items-center justify-center text-2xl">
+                👑
+              </div>
+              <h3 className="text-base font-black text-amber-300 uppercase tracking-wide">
+                ĐĂNG NHẬP HOST QUẢN TRỊ
+              </h3>
+              <p className="text-[11px] text-stone-400 mt-0.5">
+                Dành riêng cho Ban Tổ Chức điều hành phòng đua 60 người
+              </p>
+            </div>
+
+            <div className="space-y-3 text-left text-xs">
+              <div>
+                <label className="font-bold text-amber-200 block mb-1">Tài khoản Admin:</label>
+                <input
+                  type="text"
+                  autoFocus
+                  value={adminUserInp}
+                  onChange={(e) => setAdminUserInp(e.target.value)}
+                  placeholder="Nhập tài khoản..."
+                  className="w-full bg-[#0d1713] border border-amber-500/40 text-stone-100 px-3 py-2 rounded-xl focus:outline-none focus:border-amber-400 font-semibold"
+                />
+              </div>
+              <div>
+                <label className="font-bold text-amber-200 block mb-1">Mật khẩu:</label>
+                <input
+                  type="password"
+                  value={adminPassInp}
+                  onChange={(e) => setAdminPassInp(e.target.value)}
+                  placeholder="Nhập mật khẩu..."
+                  className="w-full bg-[#0d1713] border border-amber-500/40 text-stone-100 px-3 py-2 rounded-xl focus:outline-none focus:border-amber-400 font-semibold"
+                />
+              </div>
+
+              {adminLoginError && (
+                <div className="p-2.5 bg-red-950/90 border border-red-500 rounded-xl text-red-200 text-[11px] font-bold text-center">
+                  {adminLoginError}
+                </div>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              className="mt-5 w-full py-2.5 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-stone-950 font-black rounded-xl text-xs uppercase tracking-wider shadow-lg transition active:scale-95"
+            >
+              ĐĂNG NHẬP & MỞ BẢNG HOST
+            </button>
+          </form>
         </div>
       )}
 
