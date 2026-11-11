@@ -231,8 +231,11 @@ const server = http.createServer(async (req, res) => {
       for (const p of room.players.values()) {
         p.isFinished = false;
         p.finishTimeMs = null;
+        p.solvedCount = 0;
+        p.currentMapId = 'MAP_QUANGTRUONG';
+        p.currentMapName = 'Quảng Trường Ánh Sáng';
       }
-      console.log(`[RACE STARTED] Phòng ${code} đã bắt đầu lúc ${new Date().toLocaleTimeString()}!`);
+      console.log(`[RACE STARTED] Phòng ${code} đã bắt đầu mới lúc ${new Date().toLocaleTimeString()}!`);
     } else if (body.action === 'RESET') {
       room.status = 'WAITING';
       room.startTime = null;
@@ -290,14 +293,29 @@ const server = http.createServer(async (req, res) => {
 
     const existing = room.players.get(pid);
 
-    let finishTimeMs = existing?.finishTimeMs || null;
-    if (body.isFinished && !finishTimeMs) {
+    // Nếu phòng đang RACING với startTime mới mà client chưa kịp reset (clientStartTime !== room.startTime),
+    // ép dữ liệu của client trên server về 0 ở đầu ván để BXH Admin luôn sạch từ đầu
+    const isClientStaleForNewRace =
+      room.status === 'RACING' &&
+      room.startTime &&
+      body.clientStartTime !== room.startTime;
+
+    let finishTimeMs = isClientStaleForNewRace ? null : (existing?.finishTimeMs || null);
+    if (!isClientStaleForNewRace && body.isFinished && !finishTimeMs) {
       finishTimeMs = room.startTime ? Math.max(1000, Date.now() - room.startTime) : (body.finishTimeMs || 1000);
       room._dirty = true;
     }
 
-    const nextSolved = typeof body.solvedCount === 'number' ? body.solvedCount : 0;
-    const nextMapId = body.currentMapId || 'MAP_QUANGTRUONG';
+    const nextSolved = isClientStaleForNewRace
+      ? 0
+      : (typeof body.solvedCount === 'number' ? body.solvedCount : 0);
+    const nextMapId = isClientStaleForNewRace
+      ? 'MAP_QUANGTRUONG'
+      : (body.currentMapId || 'MAP_QUANGTRUONG');
+    const nextMapName = isClientStaleForNewRace
+      ? 'Quảng Trường Ánh Sáng'
+      : (body.currentMapName || 'Quảng Trường Ánh Sáng');
+    const nextIsFinished = isClientStaleForNewRace ? false : !!body.isFinished;
     const nextName = (body.playerName || 'Hò Văn Tèn').trim().slice(0, 30);
 
     // Chỉ đánh dấu dirty khi điểm số, map, tên hoặc trạng thái về đích thực sự thay đổi
@@ -306,7 +324,7 @@ const server = http.createServer(async (req, res) => {
       existing.solvedCount !== nextSolved ||
       existing.currentMapId !== nextMapId ||
       existing.name !== nextName ||
-      existing.isFinished !== !!body.isFinished
+      existing.isFinished !== nextIsFinished
     ) {
       room._dirty = true;
     }
@@ -315,10 +333,10 @@ const server = http.createServer(async (req, res) => {
       id: pid,
       name: nextName,
       currentMapId: nextMapId,
-      currentMapName: body.currentMapName || 'Quảng Trường Ánh Sáng',
+      currentMapName: nextMapName,
       solvedCount: nextSolved,
       totalPieces: typeof body.totalPieces === 'number' ? body.totalPieces : 8,
-      isFinished: !!body.isFinished,
+      isFinished: nextIsFinished,
       finishTimeMs,
       lastSeen: Date.now()
     });

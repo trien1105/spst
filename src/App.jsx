@@ -2071,8 +2071,22 @@ const HISTORICAL_CRAFTING_RECIPES = [
 ];
 
 export default function App() {
-  // Quản lý map hiện tại (Mặc định khởi đầu tại Quảng Trường Ánh Sáng)
-  const [currentMapId, setCurrentMapId] = useState('MAP_QUANGTRUONG');
+  // Đọc tiến trình đã lưu trong localStorage để chống mất dữ liệu khi rớt mạng / tải lại trang
+  const initialSaved = useMemo(() => {
+    try {
+      const raw = localStorage.getItem('cddl_saved_progress_v1');
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Quản lý map hiện tại (Khôi phục từ localStorage hoặc khởi đầu tại Quảng Trường Ánh Sáng)
+  const [currentMapId, setCurrentMapId] = useState(() => {
+    const savedMap = initialSaved?.currentMapId;
+    return savedMap && MAP_DEFINITIONS[savedMap] ? savedMap : 'MAP_QUANGTRUONG';
+  });
   const [mapTransitionText, setMapTransitionText] = useState(null);
 
   const currentMap = useMemo(() => {
@@ -2081,10 +2095,22 @@ export default function App() {
 
   const mapData = useMemo(() => currentMap.generator(), [currentMap]);
 
-  // Tọa độ người chơi mượt mà
-  const posRef = useRef(currentMap.spawn);
-  const lastDisplayPosRef = useRef(currentMap.spawn);
-  const [playerDisplayPos, setPlayerDisplayPos] = useState(currentMap.spawn);
+  // Tọa độ người chơi mượt mà (Khôi phục tọa độ đã lưu nếu cùng map)
+  const initialPos = useMemo(() => {
+    if (
+      initialSaved?.playerPos &&
+      typeof initialSaved.playerPos.x === 'number' &&
+      typeof initialSaved.playerPos.y === 'number'
+    ) {
+      return { x: initialSaved.playerPos.x, y: initialSaved.playerPos.y };
+    }
+    const m = MAP_DEFINITIONS[initialSaved?.currentMapId] || MAP_DEFINITIONS.MAP_QUANGTRUONG;
+    return { ...m.spawn };
+  }, [initialSaved]);
+
+  const posRef = useRef(initialPos);
+  const lastDisplayPosRef = useRef(initialPos);
+  const [playerDisplayPos, setPlayerDisplayPos] = useState(initialPos);
   const dirRef = useRef('down');
   const animStepRef = useRef(0);
   const walkTimerRef = useRef(0);
@@ -2101,12 +2127,20 @@ export default function App() {
   const threatLevelRef = useRef(0);
   const [threatLevel, setThreatLevel] = useState(0);
   const [isPatrolAlerting, setIsPatrolAlerting] = useState(false);
-  const [collectedDirectives, setCollectedDirectives] = useState([]);
-  const [collectedItems, setCollectedItems] = useState([]);
-  const [solvedIds, setSolvedIds] = useState([]);
+  const [collectedDirectives, setCollectedDirectives] = useState(() =>
+    Array.isArray(initialSaved?.collectedDirectives) ? initialSaved.collectedDirectives : []
+  );
+  const [collectedItems, setCollectedItems] = useState(() =>
+    Array.isArray(initialSaved?.collectedItems) ? initialSaved.collectedItems : []
+  );
+  const [solvedIds, setSolvedIds] = useState(() =>
+    Array.isArray(initialSaved?.solvedIds) ? initialSaved.solvedIds : []
+  );
 
   // Vật phẩm rơi ngẫu nhiên trên map sau khi trả lời xong câu hỏi NPC
-  const [activeDroppedItem, setActiveDroppedItem] = useState(null);
+  const [activeDroppedItem, setActiveDroppedItem] = useState(() =>
+    initialSaved?.activeDroppedItem || null
+  );
 
   // Modal khi bị mật thám Pháp bắt (100% Threat)
   const [capturedModal, setCapturedModal] = useState(false);
@@ -2121,8 +2155,12 @@ export default function App() {
   // Modal cảnh báo khi chưa đủ bảo vật cử hành tại Lễ Đài Ba Đình
   const [podiumWarningModal, setPodiumWarningModal] = useState(null);
 
-  // Mục tiêu kế tiếp (Mặc định là Anh - Trưởng nhóm CON ĐƯỜNG ĐỘC LẬP)
-  const [currentTargetNpcId, setCurrentTargetNpcId] = useState('NPC_ANH');
+  // Mục tiêu kế tiếp (Khôi phục từ localStorage hoặc mặc định là Anh)
+  const [currentTargetNpcId, setCurrentTargetNpcId] = useState(() =>
+    initialSaved?.currentTargetNpcId && ALL_HISTORICAL_NPCS[initialSaved.currentTargetNpcId]
+      ? initialSaved.currentTargetNpcId
+      : 'NPC_ANH'
+  );
 
   // Hộp thoại & UI State (Đa câu hỏi)
   const [activeNpc, setActiveNpc] = useState(null);
@@ -2132,7 +2170,9 @@ export default function App() {
   const [isExpandedScreen, setIsExpandedScreen] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1.22); // Zoom to rõ mặc định 122%
   const [soundOn, setSoundOn] = useState(true);
-  const [gameStatus, setGameStatus] = useState('PLAYING');
+  const [gameStatus, setGameStatus] = useState(() =>
+    initialSaved?.gameStatus === 'WON' ? 'WON' : 'PLAYING'
+  );
   const [showDirectivesModal, setShowDirectivesModal] = useState(false);
   const [showWorldMapModal, setShowWorldMapModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
@@ -2250,12 +2290,16 @@ export default function App() {
     return `${base}${ep}`;
   }, [backendUrl]);
 
-  // 4. Mã phòng của Người chơi (chỉ có khi tự nhập mã hoặc quét QR ?room=XYZ)
+  // 4. Mã phòng của Người chơi (tự động nhận từ ?room=XYZ hoặc khôi phục từ localStorage khi mất mạng/F5)
   const [roomCode, setRoomCode] = useState(() => {
     try {
       const params = new URLSearchParams(window.location.search);
       const fromQr = params.get('room');
-      return fromQr ? fromQr.trim().toUpperCase() : '';
+      if (fromQr && fromQr.trim()) return fromQr.trim().toUpperCase();
+      if (initialSaved?.roomCode && typeof initialSaved.roomCode === 'string') {
+        return initialSaved.roomCode.trim().toUpperCase();
+      }
+      return '';
     } catch {
       return '';
     }
@@ -2280,6 +2324,7 @@ export default function App() {
     SoundEngine.interact();
     setRoomCode('');
     setRaceRoomData(null);
+    syncedStartTimeRef.current = null;
   };
 
   // 5. Trạng thái phòng đua & Bảng xếp hạng
@@ -2295,8 +2340,95 @@ export default function App() {
   const [lanInfo, setLanInfo] = useState(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [customRoomInput, setCustomRoomInput] = useState('');
-  const [finishTimeMsRecord, setFinishTimeMsRecord] = useState(null);
+  const [finishTimeMsRecord, setFinishTimeMsRecord] = useState(() =>
+    initialSaved?.finishTimeMsRecord || null
+  );
   const raceStartSeenRef = useRef(false);
+  // Lưu dấu mốc startTime của ván đua hiện tại để phân biệt reconnect cùng ván vs Admin bấm Bắt Đầu ván mới
+  const syncedStartTimeRef = useRef(initialSaved?.syncedStartTime || null);
+
+  // Hàm ép toàn bộ tiến trình người chơi quay về điểm xuất phát (khi Admin bấm Bắt Đầu hoặc Đặt Lại)
+  const resetPlayerForNewRaceSession = useCallback((newStartTime) => {
+    syncedStartTimeRef.current = newStartTime || null;
+    const startSpawn = { ...MAP_DEFINITIONS.MAP_QUANGTRUONG.spawn };
+    setCurrentMapId('MAP_QUANGTRUONG');
+    posRef.current = startSpawn;
+    lastDisplayPosRef.current = startSpawn;
+    setPlayerDisplayPos(startSpawn);
+    patrolsRef.current = JSON.parse(JSON.stringify(MAP_DEFINITIONS.MAP_QUANGTRUONG.patrols || []));
+    dirRef.current = 'down';
+    threatLevelRef.current = 0;
+    setThreatLevel(0);
+    setIsPatrolAlerting(false);
+    setCollectedDirectives([]);
+    setCollectedItems([]);
+    setSolvedIds([]);
+    setActiveDroppedItem(null);
+    setCapturedModal(false);
+    capturedModalRef.current = false;
+    setCurrentTargetNpcId('NPC_ANH');
+    setActiveNpc(null);
+    setCurrentQuestionIdx(0);
+    setPuzzleResult(null);
+    setRelicModal(null);
+    setCraftSuccessModal(null);
+    setPortalBlockedModal(null);
+    setPodiumWarningModal(null);
+    setFinishTimeMsRecord(null);
+    setGameStatus('PLAYING');
+
+    try {
+      localStorage.setItem(
+        'cddl_saved_progress_v1',
+        JSON.stringify({
+          roomCode,
+          syncedStartTime: newStartTime || null,
+          currentMapId: 'MAP_QUANGTRUONG',
+          playerPos: startSpawn,
+          solvedIds: [],
+          collectedItems: [],
+          collectedDirectives: [],
+          currentTargetNpcId: 'NPC_ANH',
+          activeDroppedItem: null,
+          gameStatus: 'PLAYING',
+          finishTimeMsRecord: null,
+          updatedAt: Date.now()
+        })
+      );
+    } catch {}
+  }, [roomCode]);
+
+  // Tự động lưu tiến trình chơi vào localStorage mỗi khi có thay đổi (chống mất dữ liệu khi disconnect / F5)
+  useEffect(() => {
+    try {
+      const progressData = {
+        roomCode,
+        syncedStartTime: syncedStartTimeRef.current,
+        currentMapId,
+        playerPos: posRef.current,
+        solvedIds,
+        collectedItems,
+        collectedDirectives,
+        currentTargetNpcId,
+        activeDroppedItem,
+        gameStatus,
+        finishTimeMsRecord,
+        updatedAt: Date.now()
+      };
+      localStorage.setItem('cddl_saved_progress_v1', JSON.stringify(progressData));
+    } catch {}
+  }, [
+    roomCode,
+    currentMapId,
+    playerDisplayPos,
+    solvedIds,
+    collectedItems,
+    collectedDirectives,
+    currentTargetNpcId,
+    activeDroppedItem,
+    gameStatus,
+    finishTimeMsRecord
+  ]);
 
   const canvasRef = useRef(null);
   const imagesRef = useRef({});
@@ -2757,7 +2889,8 @@ export default function App() {
           solvedCount: solvedIds.length,
           totalPieces: 8,
           isFinished: gameStatus === 'WON',
-          finishTimeMs: finishTimeMsRecord
+          finishTimeMs: finishTimeMsRecord,
+          clientStartTime: syncedStartTimeRef.current
         };
 
         const res = await fetch(getApiUrl('/api/race/sync'), {
@@ -2782,15 +2915,20 @@ export default function App() {
               const diffSec = Math.floor((Date.now() - data.startTime) / 1000);
               setRaceElapsedSeconds(Math.max(0, diffSec));
 
-              if (!raceStartSeenRef.current && (Date.now() - data.startTime) < 6000) {
-                raceStartSeenRef.current = true;
+              // NẾU ADMIN VỪA BẤM BẮT ĐẦU VÁN MỚI (startTime của phòng khác với syncedStartTime của máy):
+              // Lập tức reset toàn bộ tiến trình của người chơi về vạch xuất phát ban đầu!
+              if (syncedStartTimeRef.current !== data.startTime) {
+                resetPlayerForNewRaceSession(data.startTime);
                 SoundEngine.victory();
-                setRaceCountdown('XUẤT PHÁT! 🚀');
+                setRaceCountdown('BẮT ĐẦU PHẦN THI!');
                 setTimeout(() => setRaceCountdown(null), 2500);
               }
             } else if (data.roomStatus === 'WAITING') {
-              raceStartSeenRef.current = false;
               setRaceElapsedSeconds(0);
+              // Nếu trước đó đang trong một ván đua mà Admin bấm Đặt lại (RESET về WAITING) -> Reset người chơi về đầu
+              if (syncedStartTimeRef.current !== null) {
+                resetPlayerForNewRaceSession(null);
+              }
             }
           } else if (!isCancelled) {
             setBackendConnected('OFFLINE');
@@ -2815,7 +2953,7 @@ export default function App() {
       isCancelled = true;
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [roomCode, showHostModal, isAdminAuthenticated, playerId, playerName, currentMapId, currentMap, solvedIds.length, gameStatus, finishTimeMsRecord, backendUrl, getApiUrl, retryTrigger]);
+  }, [roomCode, showHostModal, isAdminAuthenticated, playerId, playerName, currentMapId, currentMap, solvedIds.length, gameStatus, finishTimeMsRecord, backendUrl, getApiUrl, retryTrigger, resetPlayerForNewRaceSession]);
 
   // Bộ đếm thời gian thi đấu tăng mỗi giây khi trạng thái RACING
   useEffect(() => {
@@ -3172,6 +3310,7 @@ export default function App() {
   // Reset Game
   const handleResetGame = () => {
     SoundEngine.interact();
+    resetPlayerForNewRaceSession(syncedStartTimeRef.current);
     setCurrentMapId('MAP_QUANGTRUONG');
     posRef.current = MAP_DEFINITIONS.MAP_QUANGTRUONG.spawn;
     lastDisplayPosRef.current = MAP_DEFINITIONS.MAP_QUANGTRUONG.spawn;
