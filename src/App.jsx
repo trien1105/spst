@@ -2166,6 +2166,7 @@ export default function App() {
   const [activeNpc, setActiveNpc] = useState(null);
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
   const [puzzleResult, setPuzzleResult] = useState(null);
+  const [selectedOptionIdx, setSelectedOptionIdx] = useState(null);
   const [relicModal, setRelicModal] = useState(null);
   const [isExpandedScreen, setIsExpandedScreen] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1.22); // Zoom to rõ mặc định 122%
@@ -2837,15 +2838,14 @@ export default function App() {
     };
   }, [currentJoinRoomUrl]);
 
-  // Lấy thông tin LAN IP cho Host khi khởi động
+  // Lấy thông tin LAN IP cho Host khi khởi động (Dùng POST text/plain để bỏ qua 100% CORS Preflight OPTIONS và màn hình chặn của Ngrok)
   useEffect(() => {
     if (!isHostMachine) return;
     let isCancelled = false;
     fetch(getApiUrl('/api/race/info'), {
-      headers: {
-        'Bypass-Tunnel-Reminder': 'true',
-        'ngrok-skip-browser-warning': 'true'
-      }
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+      body: '{}'
     })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
@@ -2857,61 +2857,104 @@ export default function App() {
     };
   }, [isHostMachine, getApiUrl]);
 
-  // Đồng bộ nhịp tim (Heartbeat sync) tối ưu cho 60 người chơi (Non-overlapping + AbortController tránh nghẽn mạng)
+  // Lưu tham chiếu dữ liệu mới nhất vào Ref để vòng lặp đồng bộ không bị hủy/khởi tạo lại liên tục khi người chơi di chuyển hoặc giải đố
+  const syncStateRef = useRef({});
+  useEffect(() => {
+    syncStateRef.current = {
+      roomCode,
+      showHostModal,
+      isAdminAuthenticated,
+      playerId,
+      playerName: (playerName || 'Hò Văn Tèn').trim(),
+      currentMapId,
+      currentMapName: currentMap?.title?.replace('HÀNH TRÌNH: ', '') || 'Chiến khu',
+      solvedCount: solvedIds.length,
+      isFinished: gameStatus === 'WON',
+      finishTimeMs: finishTimeMsRecord,
+      resetPlayerForNewRaceSession
+    };
+  }, [
+    roomCode,
+    showHostModal,
+    isAdminAuthenticated,
+    playerId,
+    playerName,
+    currentMapId,
+    currentMap,
+    solvedIds.length,
+    gameStatus,
+    finishTimeMsRecord,
+    resetPlayerForNewRaceSession
+  ]);
+
+  const consecutiveFailuresRef = useRef(0);
+
+  // Đồng bộ nhịp tim (Heartbeat sync) siêu ổn định qua Ngrok (POST text/plain Simple Request: 0 OPTIONS preflight, chịu lỗi mạng tạm thời)
   useEffect(() => {
     let isCancelled = false;
     let timeoutId = null;
+
+    const markSuccess = () => {
+      consecutiveFailuresRef.current = 0;
+      if (!isCancelled) {
+        setBackendConnected((prev) => (prev !== 'ONLINE' ? 'ONLINE' : prev));
+      }
+    };
+
+    const markFailure = () => {
+      consecutiveFailuresRef.current += 1;
+      // Chỉ báo mất kết nối khi lỗi liên tiếp >= 4 lần (~10 giây) để tránh chập chờn mạng/Ngrok làm gián đoạn người chơi
+      if (!isCancelled && consecutiveFailuresRef.current >= 4) {
+        setBackendConnected('OFFLINE');
+      }
+    };
 
     const syncWithRoom = async () => {
       if (isCancelled) return;
       if (!backendUrl || !backendUrl.trim()) {
         setBackendConnected('OFFLINE');
-        timeoutId = setTimeout(syncWithRoom, 2000);
+        timeoutId = setTimeout(syncWithRoom, 2500);
         return;
       }
 
       const controller = new AbortController();
-      const abortTimer = setTimeout(() => controller.abort(), 2200);
+      const abortTimer = setTimeout(() => controller.abort(), 6500);
+      const st = syncStateRef.current;
 
       try {
         // Nếu đang mở bảng Quản trị hoặc là tài khoản Admin, hoặc chưa nhập mã phòng: tuyệt đối không tính vào người chơi
-        if (showHostModal || isAdminAuthenticated || !roomCode || !roomCode.trim()) {
+        if (st.showHostModal || st.isAdminAuthenticated || !st.roomCode || !st.roomCode.trim()) {
           const pingRes = await fetch(getApiUrl('/api/race/info'), {
-            headers: {
-              'Bypass-Tunnel-Reminder': 'true',
-              'ngrok-skip-browser-warning': 'true'
-            },
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+            body: '{}',
             signal: controller.signal
           });
           const ct = pingRes.headers.get('content-type') || '';
           if (pingRes.ok && ct.includes('application/json')) {
-            if (!isCancelled) setBackendConnected('ONLINE');
+            markSuccess();
           } else {
-            if (!isCancelled) setBackendConnected('OFFLINE');
+            markFailure();
           }
           return;
         }
 
         const payload = {
-          roomCode,
-          playerId,
-          playerName: (playerName || 'Hò Văn Tèn').trim(),
-          currentMapId,
-          currentMapName: currentMap?.title?.replace('HÀNH TRÌNH: ', '') || 'Chiến khu',
-          solvedCount: solvedIds.length,
+          roomCode: st.roomCode,
+          playerId: st.playerId,
+          playerName: st.playerName,
+          currentMapId: st.currentMapId,
+          currentMapName: st.currentMapName,
+          solvedCount: st.solvedCount,
           totalPieces: 8,
-          isFinished: gameStatus === 'WON',
-          finishTimeMs: finishTimeMsRecord,
+          isFinished: st.isFinished,
+          finishTimeMs: st.finishTimeMs,
           clientStartTime: syncedStartTimeRef.current
         };
 
         const res = await fetch(getApiUrl('/api/race/sync'), {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Bypass-Tunnel-Reminder': 'true',
-            'ngrok-skip-browser-warning': 'true'
-          },
+          headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
           body: JSON.stringify(payload),
           signal: controller.signal
         });
@@ -2920,7 +2963,7 @@ export default function App() {
         if (res.ok && contentType.includes('application/json')) {
           const data = await res.json();
           if (!isCancelled && data.success) {
-            setBackendConnected('ONLINE');
+            markSuccess();
             setMyRankInRoom((prev) => (prev !== (data.rank || 1) ? (data.rank || 1) : prev));
             setTotalPlayersInRoom((prev) => (prev !== (data.totalPlayers || 1) ? (data.totalPlayers || 1) : prev));
 
@@ -2931,7 +2974,7 @@ export default function App() {
               // NẾU ADMIN VỪA BẤM BẮT ĐẦU VÁN MỚI (startTime của phòng khác với syncedStartTime của máy):
               // Lập tức reset toàn bộ tiến trình của người chơi về vạch xuất phát ban đầu!
               if (syncedStartTimeRef.current !== data.startTime) {
-                resetPlayerForNewRaceSession(data.startTime);
+                st.resetPlayerForNewRaceSession?.(data.startTime);
                 SoundEngine.victory();
                 setRaceCountdown('BẮT ĐẦU PHẦN THI!');
                 setTimeout(() => setRaceCountdown(null), 2500);
@@ -2940,23 +2983,21 @@ export default function App() {
               setRaceElapsedSeconds(0);
               // Nếu trước đó đang trong một ván đua mà Admin bấm Đặt lại (RESET về WAITING) -> Reset người chơi về đầu
               if (syncedStartTimeRef.current !== null) {
-                resetPlayerForNewRaceSession(null);
+                st.resetPlayerForNewRaceSession?.(null);
               }
             }
-          } else if (!isCancelled) {
-            setBackendConnected('OFFLINE');
+          } else {
+            markFailure();
           }
-        } else if (!isCancelled) {
-          setBackendConnected('OFFLINE');
+        } else {
+          markFailure();
         }
       } catch (e) {
-        if (!isCancelled) {
-          setBackendConnected('OFFLINE');
-        }
+        markFailure();
       } finally {
         clearTimeout(abortTimer);
         if (!isCancelled) {
-          timeoutId = setTimeout(syncWithRoom, 1800);
+          timeoutId = setTimeout(syncWithRoom, 2200);
         }
       }
     };
@@ -2966,7 +3007,7 @@ export default function App() {
       isCancelled = true;
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [roomCode, showHostModal, isAdminAuthenticated, playerId, playerName, currentMapId, currentMap, solvedIds.length, gameStatus, finishTimeMsRecord, backendUrl, getApiUrl, retryTrigger, resetPlayerForNewRaceSession]);
+  }, [backendUrl, getApiUrl, retryTrigger, roomCode]);
 
   // Bộ đếm thời gian thi đấu tăng mỗi giây khi trạng thái RACING
   useEffect(() => {
@@ -2979,7 +3020,7 @@ export default function App() {
     return () => clearInterval(timer);
   }, [raceRoomData?.status, raceRoomData?.startTime]);
 
-  // Host & Người chơi tải Leaderboard 60 người không chồng chéo (Non-overlapping poll)
+  // Host & Người chơi tải Leaderboard 60 người không chồng chéo (Non-overlapping poll qua POST text/plain)
   useEffect(() => {
     if (!showHostModal && !showProjectorMode && !showJoinModal) return;
     let isCancelled = false;
@@ -2988,15 +3029,14 @@ export default function App() {
     const fetchHostRoom = async () => {
       if (isCancelled) return;
       const controller = new AbortController();
-      const abortId = setTimeout(() => controller.abort(), 2400);
+      const abortId = setTimeout(() => controller.abort(), 6000);
       try {
         const targetRoom = showHostModal || showProjectorMode ? (hostRoomCode || 'DOCLAP') : (roomCode || 'DOCLAP');
-        const hostParam = showHostModal || isAdminAuthenticated ? `&hostId=${encodeURIComponent(playerId)}` : '';
-        const res = await fetch(getApiUrl(`/api/race/room?code=${encodeURIComponent(targetRoom)}${hostParam}`), {
-          headers: {
-            'Bypass-Tunnel-Reminder': 'true',
-            'ngrok-skip-browser-warning': 'true'
-          },
+        const hostIdVal = showHostModal || isAdminAuthenticated ? playerId : '';
+        const res = await fetch(getApiUrl('/api/race/room'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+          body: JSON.stringify({ code: targetRoom, hostId: hostIdVal }),
           signal: controller.signal
         });
         const contentType = res.headers.get('content-type') || '';
@@ -3010,7 +3050,7 @@ export default function App() {
       } finally {
         clearTimeout(abortId);
         if (!isCancelled) {
-          timerId = setTimeout(fetchHostRoom, 1500);
+          timerId = setTimeout(fetchHostRoom, 2000);
         }
       }
     };
@@ -3032,11 +3072,7 @@ export default function App() {
 
       const res = await fetch(getApiUrl('/api/race/action'), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Bypass-Tunnel-Reminder': 'true',
-          'ngrok-skip-browser-warning': 'true'
-        },
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
         body: JSON.stringify({ roomCode: hostRoomCode, action: 'START' })
       });
       if (res.ok) {
@@ -3054,11 +3090,7 @@ export default function App() {
       setHostTabMode('LOBBY_QR');
       const res = await fetch(getApiUrl('/api/race/action'), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Bypass-Tunnel-Reminder': 'true',
-          'ngrok-skip-browser-warning': 'true'
-        },
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
         body: JSON.stringify({ roomCode: hostRoomCode, action: 'RESET' })
       });
       if (res.ok) {
@@ -3078,11 +3110,7 @@ export default function App() {
       setHostTabMode('LIVE_RANKING');
       const res = await fetch(getApiUrl('/api/race/action'), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Bypass-Tunnel-Reminder': 'true',
-          'ngrok-skip-browser-warning': 'true'
-        },
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
         body: JSON.stringify({ roomCode: hostRoomCode, action: 'END' })
       });
       if (res.ok) {
@@ -3104,11 +3132,7 @@ export default function App() {
       setHostTabMode('LOBBY_QR');
       const res = await fetch(getApiUrl('/api/race/create'), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Bypass-Tunnel-Reminder': 'true',
-          'ngrok-skip-browser-warning': 'true'
-        },
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
         body: JSON.stringify({ roomCode: code, maxPlayers: 60 })
       });
       if (res.ok) {
@@ -3151,11 +3175,7 @@ export default function App() {
       // Gửi ngay kết quả về đích lên server
       fetch(getApiUrl('/api/race/sync'), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Bypass-Tunnel-Reminder': 'true',
-          'ngrok-skip-browser-warning': 'true'
-        },
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
         body: JSON.stringify({
           roomCode,
           playerId,
@@ -3222,6 +3242,7 @@ export default function App() {
           setActiveNpc(nearbyNpc);
           setCurrentQuestionIdx(0);
           setPuzzleResult(null);
+          setSelectedOptionIdx(null);
         } else if (nearbyBaDinhPodium) {
           handleTriggerBaDinhCeremony();
         } else if (nearbyCraftStation) {
@@ -3252,10 +3273,10 @@ export default function App() {
     };
   }, [nearbyNpc, nearbyPortal, nearbyCraftStation, nearbyBaDinhPodium, activeNpc, activeDroppedItem, currentTargetNpcId, solvedIds, targetNpc, collectedItems]);
 
-  // Trả lời câu hỏi lịch sử
-  const handleAnswer = (opt) => {
+  // Trả lời câu hỏi lịch sử (Không lộ đáp án đúng khi trả lời sai, và trả lời sai thì không được tiếp tục)
+  const handleAnswer = (opt, optIdx) => {
     if (!activeNpc) return;
-    const currentQ = activeNpc.questions[currentQuestionIdx];
+    setSelectedOptionIdx(optIdx);
 
     if (opt.isCorrect) {
       SoundEngine.success();
@@ -3305,7 +3326,10 @@ export default function App() {
       }
     } else {
       SoundEngine.wrong();
-      setPuzzleResult({ success: false, text: opt.feedback });
+      setPuzzleResult({
+        success: false,
+        text: 'Đáp án bạn chọn chưa chính xác! Bạn không thể tiếp tục cuộc đối thoại này. Hãy đóng lại và thử lại từ đầu!'
+      });
       threatLevelRef.current = Math.min(100, threatLevelRef.current + 12);
       const nextT = Math.round(threatLevelRef.current);
       setThreatLevel(nextT);
@@ -3321,15 +3345,18 @@ export default function App() {
   };
 
   const handleNextQuestion = () => {
+    if (!puzzleResult || !puzzleResult.success) return;
     SoundEngine.interact();
     setCurrentQuestionIdx((prev) => prev + 1);
     setPuzzleResult(null);
+    setSelectedOptionIdx(null);
   };
 
   const handleCloseDialogue = () => {
     setActiveNpc(null);
     setCurrentQuestionIdx(0);
     setPuzzleResult(null);
+    setSelectedOptionIdx(null);
   };
 
   // Reset Game
@@ -4690,6 +4717,7 @@ export default function App() {
               setActiveNpc(nearbyNpc);
               setCurrentQuestionIdx(0);
               setPuzzleResult(null);
+              setSelectedOptionIdx(null);
             }}
             className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-amber-500 hover:bg-amber-400 active:scale-95 text-stone-950 px-5 py-2.5 rounded-full font-black text-xs sm:text-sm uppercase tracking-wider shadow-2xl flex items-center space-x-2 border-2 border-amber-300 animate-bounce z-20 transition"
           >
@@ -4841,27 +4869,34 @@ export default function App() {
                 {activeNpc.questions[currentQuestionIdx].question}
               </p>
 
-              {/* Các phương án trả lời */}
+              {/* Các phương án trả lời (Không lộ đáp án đúng khi chọn sai) */}
               <div className="space-y-2.5">
-                {activeNpc.questions[currentQuestionIdx].options.map((opt, idx) => (
-                  <button
-                    key={idx}
-                    disabled={puzzleResult !== null}
-                    onClick={() => handleAnswer(opt)}
-                    className={`w-full text-left p-3 rounded-xl border text-xs sm:text-sm font-medium transition flex items-start space-x-2.5 ${
-                      puzzleResult
-                        ? opt.isCorrect
-                          ? 'bg-emerald-950/70 border-emerald-500 text-emerald-200'
-                          : 'bg-[#15241f] border-[#223930] opacity-50 text-stone-400'
-                        : 'bg-[#162a22] hover:bg-[#1e382e] border-[#28483b] hover:border-amber-400 text-stone-200'
-                    }`}
-                  >
-                    <span className="font-bold text-amber-400 shrink-0">
-                      {String.fromCharCode(65 + idx)}.
-                    </span>
-                    <span className="leading-snug">{opt.text.replace(/^[A-Z]\.\s*/, '')}</span>
-                  </button>
-                ))}
+                {activeNpc.questions[currentQuestionIdx].options.map((opt, idx) => {
+                  const isSelected = selectedOptionIdx === idx;
+                  let btnClass = 'bg-[#162a22] hover:bg-[#1e382e] border-[#28483b] hover:border-amber-400 text-stone-200';
+                  if (puzzleResult) {
+                    if (puzzleResult.success && isSelected) {
+                      btnClass = 'bg-emerald-950/70 border-emerald-500 text-emerald-200';
+                    } else if (!puzzleResult.success && isSelected) {
+                      btnClass = 'bg-red-950/70 border-red-500 text-red-200';
+                    } else {
+                      btnClass = 'bg-[#15241f] border-[#223930] opacity-50 text-stone-400';
+                    }
+                  }
+                  return (
+                    <button
+                      key={idx}
+                      disabled={puzzleResult !== null}
+                      onClick={() => handleAnswer(opt, idx)}
+                      className={`w-full text-left p-3 rounded-xl border text-xs sm:text-sm font-medium transition flex items-start space-x-2.5 ${btnClass}`}
+                    >
+                      <span className="font-bold text-amber-400 shrink-0">
+                        {String.fromCharCode(65 + idx)}.
+                      </span>
+                      <span className="leading-snug">{opt.text.replace(/^[A-Z]\.\s*/, '')}</span>
+                    </button>
+                  );
+                })}
               </div>
 
               {/* Kết quả phản hồi */}
@@ -4882,7 +4917,7 @@ export default function App() {
                     ) : (
                       <>
                         <XCircle className="w-4 h-4 text-red-400" />
-                        <span>CHƯA CHÍNH XÁC • NGUY CƠ DÂNG CAO</span>
+                        <span>TRẢ LỜI SAI • KHÔNG ĐƯỢC TIẾP TỤC</span>
                       </>
                     )}
                   </div>
@@ -4891,9 +4926,9 @@ export default function App() {
               )}
             </div>
 
-            {/* Footer hành động của modal */}
+            {/* Footer hành động của modal: Chỉ cho phép đi tiếp khi trả lời ĐÚNG */}
             <div className="border-t border-[#254236] pt-3.5 mt-4 flex items-center justify-end space-x-3">
-              {puzzleResult && currentQuestionIdx < activeNpc.questions.length - 1 && (
+              {puzzleResult && puzzleResult.success && currentQuestionIdx < activeNpc.questions.length - 1 && (
                 <button
                   onClick={handleNextQuestion}
                   className="bg-amber-500 hover:bg-amber-400 text-stone-950 px-4 py-2 rounded-xl text-xs sm:text-sm font-black transition flex items-center space-x-1.5"
@@ -4903,12 +4938,21 @@ export default function App() {
                 </button>
               )}
 
-              {puzzleResult && currentQuestionIdx === activeNpc.questions.length - 1 && (
+              {puzzleResult && puzzleResult.success && currentQuestionIdx === activeNpc.questions.length - 1 && (
                 <button
                   onClick={handleCloseDialogue}
                   className="bg-emerald-500 hover:bg-emerald-400 text-stone-950 px-5 py-2 rounded-xl text-xs sm:text-sm font-black transition"
                 >
                   Hoàn tất đối thoại
+                </button>
+              )}
+
+              {puzzleResult && !puzzleResult.success && (
+                <button
+                  onClick={handleCloseDialogue}
+                  className="bg-red-600 hover:bg-red-500 text-white px-5 py-2 rounded-xl text-xs sm:text-sm font-black transition"
+                >
+                  Đóng & Thử lại từ đầu
                 </button>
               )}
 

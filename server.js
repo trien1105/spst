@@ -165,6 +165,7 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Bypass-Tunnel-Reminder, ngrok-skip-browser-warning');
   res.setHeader('Access-Control-Allow-Private-Network', 'true');
+  res.setHeader('Access-Control-Max-Age', '86400');
 
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;
@@ -216,11 +217,12 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 3. GET /api/race/room
-  if (pathname === '/api/race/room' && req.method === 'GET') {
+  // 3. GET hoặc POST /api/race/room (Dùng POST giúp bỏ qua 100% CORS Preflight OPTIONS và màn hình chặn của Ngrok)
+  if (pathname === '/api/race/room' && (req.method === 'GET' || req.method === 'POST')) {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    const code = (parsedUrl.searchParams.get('code') || 'DOCLAP').trim().toUpperCase();
-    const hostId = (parsedUrl.searchParams.get('hostId') || '').trim();
+    const body = req.method === 'POST' ? await parseBody(req) : {};
+    const code = (parsedUrl.searchParams.get('code') || body.code || 'DOCLAP').trim().toUpperCase();
+    const hostId = (parsedUrl.searchParams.get('hostId') || body.hostId || '').trim();
     let room = rooms.get(code);
     if (!room) {
       room = createDefaultRoom(code);

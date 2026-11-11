@@ -132,6 +132,7 @@ export function raceRoomPlugin() {
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Bypass-Tunnel-Reminder, ngrok-skip-browser-warning');
         res.setHeader('Access-Control-Allow-Private-Network', 'true');
+        res.setHeader('Access-Control-Max-Age', '86400');
 
         if (req.method === 'OPTIONS') {
           res.statusCode = 204;
@@ -159,9 +160,10 @@ export function raceRoomPlugin() {
           return;
         }
 
-        if (pathname === '/api/race/room' && req.method === 'GET') {
-          const code = (parsedUrl.searchParams.get('code') || 'DOCLAP').trim().toUpperCase();
-          const hostId = (parsedUrl.searchParams.get('hostId') || '').trim();
+        if (pathname === '/api/race/room' && (req.method === 'GET' || req.method === 'POST')) {
+          const body = req.method === 'POST' ? await parseBody(req) : {};
+          const code = (parsedUrl.searchParams.get('code') || body.code || 'DOCLAP').trim().toUpperCase();
+          const hostId = (parsedUrl.searchParams.get('hostId') || body.hostId || '').trim();
           let room = rooms.get(code);
           if (!room) {
             room = createDefaultRoom(code);
