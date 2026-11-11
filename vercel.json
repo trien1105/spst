@@ -18,6 +18,14 @@
   ],
   "rewrites": [
     {
+      "source": "/api/race/:path*",
+      "destination": "http://180.93.126.40:4000/api/race/:path*"
+    },
+    {
+      "source": "/health",
+      "destination": "http://180.93.126.40:4000/health"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

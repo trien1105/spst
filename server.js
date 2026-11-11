@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DIST_DIR = path.join(__dirname, 'dist');
 
-// Tự động nạp biến môi trường từ file .env (KEY_NGROK, LINK_NGROK)
+// Tự động nạp biến môi trường từ file .env nếu có
 const envPath = path.join(__dirname, '.env');
 if (fs.existsSync(envPath)) {
   try {
@@ -26,9 +26,9 @@ if (fs.existsSync(envPath)) {
   } catch {}
 }
 
-const PORT = process.env.PORT || 4000;
-const KEY_NGROK = process.env.KEY_NGROK || '';
-const LINK_NGROK = (process.env.LINK_NGROK || 'https://unattractable-cognoscitively-catheryn.ngrok-free.dev').trim().replace(/\/+$/, '');
+const PORT = Number(process.env.PORT || 4000);
+const VPS_IP = (process.env.VPS_IP || '180.93.126.40').trim();
+const PUBLIC_BE_URL = (process.env.PUBLIC_BE_URL || `http://${VPS_IP}:${PORT}`).trim().replace(/\/+$/, '');
 const rooms = new Map(); // roomCode -> roomData
 
 const MIME_TYPES = {
@@ -69,7 +69,7 @@ function getLanIp() {
       }
     }
   }
-  return '127.0.0.1';
+  return VPS_IP || '127.0.0.1';
 }
 
 function parseBody(req) {
@@ -160,7 +160,7 @@ function getSerializedRoom(room, forceRefresh = false) {
 }
 
 const server = http.createServer(async (req, res) => {
-  // CORS & Private Network Access Headers cho phép https://conduongdoclap.vercel.app gọi thẳng vào Ngrok / Localhost
+  // CORS & Private Network Access Headers cho phép https://conduongdoclap.vercel.app & mọi client gọi tới VPS 180.93.126.40
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Bypass-Tunnel-Reminder, ngrok-skip-browser-warning');
@@ -181,24 +181,25 @@ const server = http.createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.end(JSON.stringify({
       status: 'ONLINE',
-      app: 'Con Đường Độc Lập - Local JS Backend Engine',
+      app: 'Con Đường Độc Lập - VPS Backend Engine',
+      vpsIp: VPS_IP,
       lanIp: getLanIp(),
       port: PORT,
+      publicUrl: PUBLIC_BE_URL,
       activeRooms: rooms.size,
       uptimeSec: Math.floor(process.uptime())
     }));
     return;
   }
 
-  // 1. GET /api/race/info
+  // 1. GET / POST /api/race/info
   if (pathname === '/api/race/info') {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    const lanIp = getLanIp();
     res.end(JSON.stringify({
-      ip: lanIp,
+      ip: VPS_IP,
+      lanIp: getLanIp(),
       port: PORT,
-      baseUrl: LINK_NGROK || `http://${lanIp}:${PORT}`,
-      ngrokUrl: LINK_NGROK
+      baseUrl: PUBLIC_BE_URL
     }));
     return;
   }
@@ -217,7 +218,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 3. GET hoặc POST /api/race/room (Dùng POST giúp bỏ qua 100% CORS Preflight OPTIONS và màn hình chặn của Ngrok)
+  // 3. GET hoặc POST /api/race/room
   if (pathname === '/api/race/room' && (req.method === 'GET' || req.method === 'POST')) {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     const body = req.method === 'POST' ? await parseBody(req) : {};
@@ -341,7 +342,6 @@ const server = http.createServer(async (req, res) => {
     const nextIsFinished = isClientStaleForNewRace ? false : !!body.isFinished;
     const nextName = (body.playerName || 'Hò Văn Tèn').trim().slice(0, 30);
 
-    // Chỉ đánh dấu dirty khi điểm số, map, tên hoặc trạng thái về đích thực sự thay đổi
     if (
       !existing ||
       existing.solvedCount !== nextSolved ||
@@ -367,7 +367,6 @@ const server = http.createServer(async (req, res) => {
     const sRoom = getSerializedRoom(room);
     const myRank = room._rankMap.get(pid) || 1;
 
-    // Payload siêu nhẹ (< 120 bytes) để 60 máy phản hồi tức thì < 2ms
     res.end(JSON.stringify({
       success: true,
       roomStatus: room.status,
@@ -379,7 +378,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 6. Phục vụ trực tiếp JS Engine & Assets từ thư mục dist/ nếu truy cập thẳng vào máy Host
+  // 6. Phục vụ trực tiếp JS Engine & Assets từ thư mục dist/ nếu có
   if (req.method === 'GET' && fs.existsSync(DIST_DIR)) {
     let safePath = path.normalize(pathname).replace(/^(\.\.[\/\\])+/, '');
     if (safePath === '/' || safePath === '\\') safePath = '/index.html';
@@ -400,45 +399,28 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // Fallback JSON status nếu gọi tới '/' mà chưa build dist
+  // Fallback JSON status
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.end(JSON.stringify({
     status: 'ONLINE',
-    app: 'Con Đường Độc Lập - Local Backend Server (60 Players Optimized)',
-    lanIp: getLanIp(),
+    app: 'Con Đường Độc Lập - VPS Backend Server (60 Players Optimized)',
+    vpsIp: VPS_IP,
     port: PORT,
+    publicUrl: PUBLIC_BE_URL,
     activeRooms: rooms.size
   }));
 });
 
-server.listen(PORT, '0.0.0.0', async () => {
-  const lanIp = getLanIp();
+server.listen(PORT, '0.0.0.0', () => {
   console.log('================================================================');
-  console.log('   CON ĐƯỜNG ĐỘC LẬP (1930 - 1945) - MÁY CHỦ XỬ LÝ TỐC ĐỘ CAO  ');
+  console.log('   CON ĐƯỜNG ĐỘC LẬP (1930 - 1945) - MÁY CHỦ VPS TỐC ĐỘ CAO     ');
   console.log('================================================================');
   console.log(`[ONLINE] Máy chủ đang chạy tại Cổng: ${PORT}`);
-  console.log(`- Tại máy Host:  http://localhost:${PORT}`);
-  console.log(`- Mạng LAN/WiFi: http://${lanIp}:${PORT}`);
-  console.log(`- Link Ngrok BE: ${LINK_NGROK}`);
+  console.log(`- Địa chỉ VPS BE: ${PUBLIC_BE_URL}`);
+  console.log(`- Healthcheck:    ${PUBLIC_BE_URL}/health`);
   console.log('----------------------------------------------------------------');
-
-  if (KEY_NGROK) {
-    try {
-      const ngrok = await import('@ngrok/ngrok');
-      const domainHost = LINK_NGROK.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
-      const listener = await ngrok.default.forward({
-        addr: PORT,
-        authtoken: KEY_NGROK,
-        domain: domainHost
-      });
-      console.log(`[NGROK ONLINE] Đã kết nối thành công tới: ${listener.url()}`);
-    } catch (err) {
-      console.log(`[NGROK INFO] ${err?.message || 'Tunnel Ngrok đang mở hoặc được quản lý ở tiến trình khác.'}`);
-    }
-  }
-
   console.log('✦ Đã tối ưu hóa bộ đệm RAM chịu tải 60 người chơi cùng lúc.');
-  console.log('✦ Giao diện https://conduongdoclap.vercel.app kết nối trực tiếp');
-  console.log(`  về ${LINK_NGROK} để xử lý logic phòng đua mượt mà nhất.`);
+  console.log('✦ Giao diện https://conduongdoclap.vercel.app đã kết nối trực tiếp');
+  console.log(`  với VPS ${PUBLIC_BE_URL} để xử lý phòng đua thời gian thực.`);
   console.log('================================================================\n');
 });

@@ -1,0 +1,42 @@
+======================================================================
+HƯỚNG DẪN DEPLOY BACKEND LÊN VPS (IP: 180.93.126.40 - PORT: 4000)
+======================================================================
+
+Backend này được viết bằng 100% Node.js thuần (Zero-Dependency), KHÔNG cần
+cài đặt node_modules nặng nề, chỉ cần VPS có sẵn Node.js là chạy ngay lập tức!
+
+----------------------------------------------------------------------
+CÁCH 1: NẾU VPS CỦA BẠN DÙNG LINUX (Ubuntu / Debian / CentOS)
+----------------------------------------------------------------------
+1. Giải nén file be-vps-180.93.126.40.zip lên VPS (ví dụ thư mục /root/be-vps):
+   unzip be-vps-180.93.126.40.zip -d /root/be-vps
+   cd /root/be-vps
+
+2. Mở cổng 4000 trên tường lửa (nếu VPS bật tường lửa):
+   ufw allow 4000/tcp
+
+3. Chạy máy chủ:
+   - Chạy trực tiếp:
+     node server.js
+   - Hoặc chạy ngầm 24/7 bằng PM2 (khuyên dùng):
+     npm install -g pm2
+     pm2 start ecosystem.config.cjs
+     pm2 save
+
+----------------------------------------------------------------------
+CÁCH 2: NẾU VPS CỦA BẠN DÙNG WINDOWS SERVER
+----------------------------------------------------------------------
+1. Giải nén file be-vps-180.93.126.40.zip ra một thư mục trên VPS.
+2. Nhấp đúp vào file `start.bat` (File sẽ tự mở cổng 4000 trên Firewall
+   và khởi động máy chủ tại http://180.93.126.40:4000).
+
+----------------------------------------------------------------------
+KIỂM TRA SAU KHI CHẠY TRÊN VPS
+----------------------------------------------------------------------
+Mở trình duyệt truy cập:
+  http://180.93.126.40:4000/health
+
+Nếu hiện JSON `{"status":"ONLINE", "vpsIp":"180.93.126.40", "port":4000, ...}`
+là Backend đã hoạt động 100% và https://conduongdoclap.vercel.app sẽ tự động
+đồng bộ phòng đua qua VPS này!
+======================================================================

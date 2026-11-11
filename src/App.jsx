@@ -2204,25 +2204,26 @@ export default function App() {
     }
   });
 
-  // 3.1. Cấu hình Backend Server URL (Mặc định trỏ thẳng vào Ngrok cố định của bạn)
-  const DEFAULT_NGROK_URL = 'https://unattractable-cognoscitively-catheryn.ngrok-free.dev';
+  // 3.1. Cấu hình Backend Server URL (Mặc định trỏ thẳng vào VPS 180.93.126.40:4000)
+  const DEFAULT_VPS_URL = 'http://180.93.126.40:4000';
   const [backendUrl, setBackendUrl] = useState(() => {
     try {
       localStorage.removeItem('cddl_backend_url');
+      localStorage.removeItem('cddl_ngrok_be_v3');
       const params = new URLSearchParams(window.location.search);
       const queryApi = params.get('api') || params.get('server') || params.get('backend');
-      if (queryApi && !queryApi.includes('localhost') && !queryApi.includes('127.0.0.1')) {
+      if (queryApi && !queryApi.includes('localhost') && !queryApi.includes('127.0.0.1') && !queryApi.includes('ngrok')) {
         const clean = queryApi.trim().replace(/\/+$/, '');
-        localStorage.setItem('cddl_ngrok_be_v3', clean);
+        localStorage.setItem('cddl_vps_be_v1', clean);
         return clean;
       }
-      const saved = localStorage.getItem('cddl_ngrok_be_v3');
-      if (saved && saved.trim() && !saved.includes('localhost') && !saved.includes('127.0.0.1')) {
+      const saved = localStorage.getItem('cddl_vps_be_v1');
+      if (saved && saved.trim() && !saved.includes('localhost') && !saved.includes('127.0.0.1') && !saved.includes('ngrok')) {
         return saved.trim().replace(/\/+$/, '');
       }
-      localStorage.setItem('cddl_ngrok_be_v3', DEFAULT_NGROK_URL);
+      localStorage.setItem('cddl_vps_be_v1', DEFAULT_VPS_URL);
     } catch {}
-    return DEFAULT_NGROK_URL;
+    return DEFAULT_VPS_URL;
   });
 
   // Trạng thái kết nối Backend (Luôn giữ ONLINE để không bao giờ hiện popup chặn người chơi)
@@ -2288,17 +2289,15 @@ export default function App() {
     return 'https://conduongdoclap.vercel.app';
   });
 
-  // Helper an toàn tạo URL gọi API (Ưu tiên gọi trực tiếp localhost:4000 nếu đang ở máy Host để tiết kiệm 100% băng thông Ngrok cho người chơi từ xa)
+  // Helper tạo URL gọi API tới VPS 180.93.126.40:4000 (Tự động đi qua HTTPS Rewrite của Vercel khi đang ở https:// để không bị trình duyệt chặn Mixed Content)
   const getApiUrl = useCallback((endpoint) => {
     const ep = endpoint.startsWith('/') ? endpoint : '/' + endpoint;
+    const base = (backendUrl || DEFAULT_VPS_URL).trim().replace(/\/+$/, '');
     try {
-      const h = window.location.hostname;
-      if (h === 'localhost' || h === '127.0.0.1') {
-        return `http://localhost:4000${ep}`;
+      if (typeof window !== 'undefined' && window.location.protocol === 'https:' && base.startsWith('http://')) {
+        return ep;
       }
     } catch {}
-    if (!backendUrl) return `${DEFAULT_NGROK_URL}${ep}`;
-    const base = backendUrl.trim().replace(/\/+$/, '');
     return `${base}${ep}`;
   }, [backendUrl]);
 
@@ -2835,11 +2834,11 @@ export default function App() {
   const buildJoinRoomUrl = useCallback((targetCode, customApi, customFe) => {
     const code = (targetCode || roomCode || 'DOCLAP').trim().toUpperCase();
     const fe = (customFe !== undefined ? customFe : (frontendDomain || 'https://conduongdoclap.vercel.app')).trim().replace(/\/+$/, '');
-    const api = customApi !== undefined ? customApi : backendUrl;
+    const api = (customApi !== undefined ? customApi : backendUrl || '').trim().replace(/\/+$/, '');
 
     let fullUrl = `${fe}/?room=${encodeURIComponent(code)}`;
-    if (api && api.trim()) {
-      fullUrl += `&api=${encodeURIComponent(api.trim().replace(/\/+$/, ''))}`;
+    if (api && api !== DEFAULT_VPS_URL) {
+      fullUrl += `&api=${encodeURIComponent(api)}`;
     }
     return fullUrl;
   }, [roomCode, frontendDomain, backendUrl]);
@@ -5473,7 +5472,7 @@ export default function App() {
                       const val = e.target.value;
                       setBackendUrl(val);
                       try {
-                        localStorage.setItem('cddl_backend_url', val);
+                        localStorage.setItem('cddl_vps_be_v1', val);
                       } catch {}
                     }}
                     className="w-full bg-neutral-900 border border-neutral-700 text-neutral-200 font-mono px-2.5 py-1 rounded focus:outline-none focus:border-neutral-500"

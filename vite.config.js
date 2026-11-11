@@ -6,5 +6,15 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+    proxy: {
+      '/api/race': {
+        target: 'http://180.93.126.40:4000',
+        changeOrigin: true
+      },
+      '/health': {
+        target: 'http://180.93.126.40:4000',
+        changeOrigin: true
+      }
+    }
   }
 });

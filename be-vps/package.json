@@ -1,0 +1,14 @@
+{
+  "name": "conduongdoclap-be-vps",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Backend Server Con Duong Doc Lap (1930 - 1945) cho VPS 180.93.126.40",
+  "scripts": {
+    "start": "node server.js",
+    "pm2": "pm2 start ecosystem.config.cjs && pm2 save"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
