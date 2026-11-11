@@ -2208,24 +2208,25 @@ export default function App() {
   const DEFAULT_NGROK_URL = 'https://unattractable-cognoscitively-catheryn.ngrok-free.dev';
   const [backendUrl, setBackendUrl] = useState(() => {
     try {
+      localStorage.removeItem('cddl_backend_url');
       const params = new URLSearchParams(window.location.search);
       const queryApi = params.get('api') || params.get('server') || params.get('backend');
-      if (queryApi) {
+      if (queryApi && !queryApi.includes('localhost') && !queryApi.includes('127.0.0.1')) {
         const clean = queryApi.trim().replace(/\/+$/, '');
-        localStorage.setItem('cddl_backend_url', clean);
+        localStorage.setItem('cddl_ngrok_be_v3', clean);
         return clean;
       }
-      const saved = localStorage.getItem('cddl_backend_url');
-      if (saved && saved.trim() && saved.trim() !== 'http://localhost:4000') {
+      const saved = localStorage.getItem('cddl_ngrok_be_v3');
+      if (saved && saved.trim() && !saved.includes('localhost') && !saved.includes('127.0.0.1')) {
         return saved.trim().replace(/\/+$/, '');
       }
-      localStorage.setItem('cddl_backend_url', DEFAULT_NGROK_URL);
+      localStorage.setItem('cddl_ngrok_be_v3', DEFAULT_NGROK_URL);
     } catch {}
     return DEFAULT_NGROK_URL;
   });
 
-  // Trạng thái kết nối thực tế tới Backend ('CHECKING' | 'ONLINE' | 'OFFLINE')
-  const [backendConnected, setBackendConnected] = useState('CHECKING');
+  // Trạng thái kết nối Backend (Luôn giữ ONLINE để không bao giờ hiện popup chặn người chơi)
+  const [backendConnected, setBackendConnected] = useState('ONLINE');
   const [retryTrigger, setRetryTrigger] = useState(0);
 
   // 3. Tài khoản Admin Host (tk: admin / mk: trienngu) hoặc chạy trực tiếp trên Localhost
@@ -2287,10 +2288,16 @@ export default function App() {
     return 'https://conduongdoclap.vercel.app';
   });
 
-  // Helper an toàn tạo URL gọi API
+  // Helper an toàn tạo URL gọi API (Ưu tiên gọi trực tiếp localhost:4000 nếu đang ở máy Host để tiết kiệm 100% băng thông Ngrok cho người chơi từ xa)
   const getApiUrl = useCallback((endpoint) => {
     const ep = endpoint.startsWith('/') ? endpoint : '/' + endpoint;
-    if (!backendUrl) return ep;
+    try {
+      const h = window.location.hostname;
+      if (h === 'localhost' || h === '127.0.0.1') {
+        return `http://localhost:4000${ep}`;
+      }
+    } catch {}
+    if (!backendUrl) return `${DEFAULT_NGROK_URL}${ep}`;
     const base = backendUrl.trim().replace(/\/+$/, '');
     return `${base}${ep}`;
   }, [backendUrl]);
@@ -2887,58 +2894,27 @@ export default function App() {
     resetPlayerForNewRaceSession
   ]);
 
-  const consecutiveFailuresRef = useRef(0);
-
-  // Đồng bộ nhịp tim (Heartbeat sync) siêu ổn định qua Ngrok (POST text/plain Simple Request: 0 OPTIONS preflight, chịu lỗi mạng tạm thời)
+  // Đồng bộ nhịp tim (Heartbeat sync) siêu ổn định qua Ngrok (POST text/plain Simple Request: 0 OPTIONS preflight, không bao giờ hiện popup chặn)
   useEffect(() => {
     let isCancelled = false;
     let timeoutId = null;
 
-    const markSuccess = () => {
-      consecutiveFailuresRef.current = 0;
-      if (!isCancelled) {
-        setBackendConnected((prev) => (prev !== 'ONLINE' ? 'ONLINE' : prev));
-      }
-    };
-
-    const markFailure = () => {
-      consecutiveFailuresRef.current += 1;
-      // Chỉ báo mất kết nối khi lỗi liên tiếp >= 4 lần (~10 giây) để tránh chập chờn mạng/Ngrok làm gián đoạn người chơi
-      if (!isCancelled && consecutiveFailuresRef.current >= 4) {
-        setBackendConnected('OFFLINE');
-      }
-    };
-
     const syncWithRoom = async () => {
       if (isCancelled) return;
-      if (!backendUrl || !backendUrl.trim()) {
-        setBackendConnected('OFFLINE');
-        timeoutId = setTimeout(syncWithRoom, 2500);
+      const st = syncStateRef.current;
+
+      // Nếu đang mở bảng Quản trị hoặc là tài khoản Admin, hoặc chưa nhập mã phòng: không cần gửi heartbeat người chơi
+      if (st.showHostModal || st.isAdminAuthenticated || !st.roomCode || !st.roomCode.trim()) {
+        if (!isCancelled) {
+          timeoutId = setTimeout(syncWithRoom, 2500);
+        }
         return;
       }
 
       const controller = new AbortController();
-      const abortTimer = setTimeout(() => controller.abort(), 6500);
-      const st = syncStateRef.current;
+      const abortTimer = setTimeout(() => controller.abort(), 7000);
 
       try {
-        // Nếu đang mở bảng Quản trị hoặc là tài khoản Admin, hoặc chưa nhập mã phòng: tuyệt đối không tính vào người chơi
-        if (st.showHostModal || st.isAdminAuthenticated || !st.roomCode || !st.roomCode.trim()) {
-          const pingRes = await fetch(getApiUrl('/api/race/info'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-            body: '{}',
-            signal: controller.signal
-          });
-          const ct = pingRes.headers.get('content-type') || '';
-          if (pingRes.ok && ct.includes('application/json')) {
-            markSuccess();
-          } else {
-            markFailure();
-          }
-          return;
-        }
-
         const payload = {
           roomCode: st.roomCode,
           playerId: st.playerId,
@@ -2963,7 +2939,6 @@ export default function App() {
         if (res.ok && contentType.includes('application/json')) {
           const data = await res.json();
           if (!isCancelled && data.success) {
-            markSuccess();
             setMyRankInRoom((prev) => (prev !== (data.rank || 1) ? (data.rank || 1) : prev));
             setTotalPlayersInRoom((prev) => (prev !== (data.totalPlayers || 1) ? (data.totalPlayers || 1) : prev));
 
@@ -2986,14 +2961,9 @@ export default function App() {
                 st.resetPlayerForNewRaceSession?.(null);
               }
             }
-          } else {
-            markFailure();
           }
-        } else {
-          markFailure();
         }
       } catch (e) {
-        markFailure();
       } finally {
         clearTimeout(abortTimer);
         if (!isCancelled) {
@@ -6156,65 +6126,6 @@ export default function App() {
         </div>
       )}
 
-      {/* ===================================================================
-          13. MÀN HÌNH KHÓA KHI TẮT BACKEND (BẮT BUỘC CHẠY BE TRÊN MÁY HIỆN TẠI)
-      =================================================================== */}
-      {backendConnected === 'OFFLINE' && (
-        <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-gradient-to-b from-[#260909] to-[#120606] border-2 border-red-500 rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl text-center text-stone-100">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-red-600/20 border-2 border-red-500 flex items-center justify-center text-3xl animate-bounce">
-              ⚡
-            </div>
-            <span className="text-[11px] font-mono font-black uppercase tracking-widest bg-red-950 text-red-300 border border-red-500/50 px-3 py-1 rounded-full">
-              MÁY CHỦ BACKEND ĐANG TẮT (SERVER OFFLINE)
-            </span>
-            <h2 className="text-xl sm:text-2xl font-black text-amber-300 uppercase tracking-wide mt-3">
-              CON ĐƯỜNG ĐỘC LẬP (1930 – 1945)
-            </h2>
-            <p className="text-xs sm:text-sm text-stone-300 mt-2 leading-relaxed">
-              Giao diện <b>Vercel</b> chỉ phụ trách hiển thị hình ảnh. Toàn bộ xử lý trò chơi và đồng bộ <b>60 người chơi</b> bắt buộc phải chạy qua <b>Backend trên máy tính của bạn</b>.
-            </p>
-
-            <div className="my-4 p-4 bg-black/50 border border-amber-500/30 rounded-2xl text-left text-xs space-y-2">
-              <div className="font-bold text-amber-300 uppercase">Cách bật lại Backend để chơi ngay:</div>
-              <p className="text-stone-300">
-                1. Trên máy tính của bạn, mở thư mục dự án và chạy file <code className="bg-red-950/80 text-amber-200 px-1.5 py-0.5 rounded font-mono">run-backend.bat</code> (hoặc lệnh <code className="bg-red-950/80 text-amber-200 px-1.5 py-0.5 rounded font-mono">node server.js</code>).
-              </p>
-              <p className="text-stone-300">
-                2. Nếu chơi từ điện thoại/máy khác qua mạng, hãy nhập link HTTPS Tunnel (từ <code className="bg-red-950/80 text-amber-200 px-1.5 py-0.5 rounded font-mono">run-backend-tunnel.bat</code>) vào ô bên dưới:
-              </p>
-
-              <div className="pt-2">
-                <label className="text-[11px] font-bold text-emerald-300 block mb-1">
-                  Địa chỉ Máy chủ Backend (Host PC):
-                </label>
-                <input
-                  type="text"
-                  value={backendUrl}
-                  onChange={(e) => {
-                    const val = e.target.value.trim();
-                    setBackendUrl(val);
-                    try {
-                      localStorage.setItem('cddl_backend_url', val);
-                    } catch {}
-                  }}
-                  placeholder="http://localhost:4000 hoặc https://xxxx.loca.lt"
-                  className="w-full bg-[#1a0b0b] border border-amber-500/50 text-xs font-mono text-amber-200 px-3 py-2 rounded-xl focus:outline-none focus:border-amber-400"
-                />
-              </div>
-            </div>
-
-            <button
-              onClick={() => {
-                setBackendConnected('CHECKING');
-                setRetryTrigger((c) => c + 1);
-              }}
-              className="w-full py-3 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-stone-950 font-black rounded-xl text-xs sm:text-sm uppercase tracking-wider shadow-xl transition active:scale-95"
-            >
-              🔄 KẾT NỐI LẠI VỚI BACKEND NGAY
-            </button>
-          </div>
-        </div>
       )}
     </div>
   );
