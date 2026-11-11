@@ -2203,7 +2203,8 @@ export default function App() {
     }
   });
 
-  // 3.1. Cấu hình Backend Server URL (Bắt buộc chạy trên PC của bạn ở cổng 4000 hoặc Tunnel, Vercel chỉ lo giao diện)
+  // 3.1. Cấu hình Backend Server URL (Mặc định trỏ thẳng vào Ngrok cố định của bạn)
+  const DEFAULT_NGROK_URL = 'https://unattractable-cognoscitively-catheryn.ngrok-free.dev';
   const [backendUrl, setBackendUrl] = useState(() => {
     try {
       const params = new URLSearchParams(window.location.search);
@@ -2214,9 +2215,12 @@ export default function App() {
         return clean;
       }
       const saved = localStorage.getItem('cddl_backend_url');
-      if (saved && saved.trim()) return saved.trim();
+      if (saved && saved.trim() && saved.trim() !== 'http://localhost:4000') {
+        return saved.trim().replace(/\/+$/, '');
+      }
+      localStorage.setItem('cddl_backend_url', DEFAULT_NGROK_URL);
     } catch {}
-    return 'http://localhost:4000';
+    return DEFAULT_NGROK_URL;
   });
 
   // Trạng thái kết nối thực tế tới Backend ('CHECKING' | 'ONLINE' | 'OFFLINE')
@@ -2837,7 +2841,12 @@ export default function App() {
   useEffect(() => {
     if (!isHostMachine) return;
     let isCancelled = false;
-    fetch(getApiUrl('/api/race/info'), { headers: { 'Bypass-Tunnel-Reminder': 'true' } })
+    fetch(getApiUrl('/api/race/info'), {
+      headers: {
+        'Bypass-Tunnel-Reminder': 'true',
+        'ngrok-skip-browser-warning': 'true'
+      }
+    })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (!isCancelled && data) setLanInfo(data);
@@ -2868,7 +2877,10 @@ export default function App() {
         // Nếu đang mở bảng Quản trị hoặc là tài khoản Admin, hoặc chưa nhập mã phòng: tuyệt đối không tính vào người chơi
         if (showHostModal || isAdminAuthenticated || !roomCode || !roomCode.trim()) {
           const pingRes = await fetch(getApiUrl('/api/race/info'), {
-            headers: { 'Bypass-Tunnel-Reminder': 'true' },
+            headers: {
+              'Bypass-Tunnel-Reminder': 'true',
+              'ngrok-skip-browser-warning': 'true'
+            },
             signal: controller.signal
           });
           const ct = pingRes.headers.get('content-type') || '';
@@ -2897,7 +2909,8 @@ export default function App() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Bypass-Tunnel-Reminder': 'true'
+            'Bypass-Tunnel-Reminder': 'true',
+            'ngrok-skip-browser-warning': 'true'
           },
           body: JSON.stringify(payload),
           signal: controller.signal
@@ -2980,7 +2993,10 @@ export default function App() {
         const targetRoom = showHostModal || showProjectorMode ? (hostRoomCode || 'DOCLAP') : (roomCode || 'DOCLAP');
         const hostParam = showHostModal || isAdminAuthenticated ? `&hostId=${encodeURIComponent(playerId)}` : '';
         const res = await fetch(getApiUrl(`/api/race/room?code=${encodeURIComponent(targetRoom)}${hostParam}`), {
-          headers: { 'Bypass-Tunnel-Reminder': 'true' },
+          headers: {
+            'Bypass-Tunnel-Reminder': 'true',
+            'ngrok-skip-browser-warning': 'true'
+          },
           signal: controller.signal
         });
         const contentType = res.headers.get('content-type') || '';
@@ -3018,7 +3034,8 @@ export default function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Bypass-Tunnel-Reminder': 'true'
+          'Bypass-Tunnel-Reminder': 'true',
+          'ngrok-skip-browser-warning': 'true'
         },
         body: JSON.stringify({ roomCode: hostRoomCode, action: 'START' })
       });
@@ -3039,7 +3056,8 @@ export default function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Bypass-Tunnel-Reminder': 'true'
+          'Bypass-Tunnel-Reminder': 'true',
+          'ngrok-skip-browser-warning': 'true'
         },
         body: JSON.stringify({ roomCode: hostRoomCode, action: 'RESET' })
       });
@@ -3062,7 +3080,8 @@ export default function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Bypass-Tunnel-Reminder': 'true'
+          'Bypass-Tunnel-Reminder': 'true',
+          'ngrok-skip-browser-warning': 'true'
         },
         body: JSON.stringify({ roomCode: hostRoomCode, action: 'END' })
       });
@@ -3087,7 +3106,8 @@ export default function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Bypass-Tunnel-Reminder': 'true'
+          'Bypass-Tunnel-Reminder': 'true',
+          'ngrok-skip-browser-warning': 'true'
         },
         body: JSON.stringify({ roomCode: code, maxPlayers: 60 })
       });
@@ -3131,7 +3151,11 @@ export default function App() {
       // Gửi ngay kết quả về đích lên server
       fetch(getApiUrl('/api/race/sync'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Bypass-Tunnel-Reminder': 'true',
+          'ngrok-skip-browser-warning': 'true'
+        },
         body: JSON.stringify({
           roomCode,
           playerId,
@@ -3141,7 +3165,8 @@ export default function App() {
           solvedCount: 8,
           totalPieces: 8,
           isFinished: true,
-          finishTimeMs: finishMs
+          finishTimeMs: finishMs,
+          clientStartTime: syncedStartTimeRef.current
         })
       }).catch(() => {});
     } else {

@@ -1,28 +1,19 @@
 @echo off
-title MAY CHU BACKEND ONLINE (HTTPS TUNNEL) - CON DUONG DOC LAP
+title MAY CHU BACKEND + NGROK - CON DUONG DOC LAP
 color 0B
 
 echo ======================================================================
-echo    KHOI CHAY BACKEND CUC BO + DUONG HAM HTTPS CHO VERCEL.APP
-echo    UNG DUNG: CON DUONG DOC LAP (1930 - 1945) - CHIU TAI 60 NGUOI
+echo    KHOI CHAY BACKEND CUC BO + NGROK CHO VERCEL.APP
+echo    LINK NGROK: https://unattractable-cognoscitively-catheryn.ngrok-free.dev
 echo ======================================================================
 echo.
 
-:: 1. Don dep port 4000
+:: Don dep port 4000 neu dang bi chiem
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":4000" ^| findstr "LISTENING"') do (
     taskkill /F /PID %%a >nul 2>nul
 )
 
-:: 2. Chay server ngam
-echo [1/2] Dang khoi dong Backend Node.js tai port 4000...
-start "ConDuongDocLap-Backend-Port4000" cmd /c "node server.js"
-
-:: 3. Khoi tao HTTPS Tunnel cho Vercel
-echo [2/2] Dang tao duong ham HTTPS cong khai qua localtunnel...
-echo (Duong link https://... se hien ra ben duoi, hay copy link nay dan vao o Backend Host)
-echo ======================================================================
-echo.
-
-call npx localtunnel --port 4000
+echo [DANG KHOI DONG BACKEND PORT 4000 ^& KET NOI NGROK...]
+node server.js
 
 pause

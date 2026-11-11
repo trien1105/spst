@@ -8,7 +8,27 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DIST_DIR = path.join(__dirname, 'dist');
 
+// Tự động nạp biến môi trường từ file .env (KEY_NGROK, LINK_NGROK)
+const envPath = path.join(__dirname, '.env');
+if (fs.existsSync(envPath)) {
+  try {
+    const envLines = fs.readFileSync(envPath, 'utf-8').split(/\r?\n/);
+    for (const line of envLines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx > 0) {
+        const k = trimmed.slice(0, eqIdx).trim();
+        const v = trimmed.slice(eqIdx + 1).trim().replace(/^['"]|['"]$/g, '');
+        if (!process.env[k]) process.env[k] = v;
+      }
+    }
+  } catch {}
+}
+
 const PORT = process.env.PORT || 4000;
+const KEY_NGROK = process.env.KEY_NGROK || '';
+const LINK_NGROK = (process.env.LINK_NGROK || 'https://unattractable-cognoscitively-catheryn.ngrok-free.dev').trim().replace(/\/+$/, '');
 const rooms = new Map(); // roomCode -> roomData
 
 const MIME_TYPES = {
@@ -140,10 +160,10 @@ function getSerializedRoom(room, forceRefresh = false) {
 }
 
 const server = http.createServer(async (req, res) => {
-  // CORS & Private Network Access Headers cho phép https://conduongdoclap.vercel.app gọi thẳng vào http://localhost:4000 trên máy hiện tại
+  // CORS & Private Network Access Headers cho phép https://conduongdoclap.vercel.app gọi thẳng vào Ngrok / Localhost
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Bypass-Tunnel-Reminder');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Bypass-Tunnel-Reminder, ngrok-skip-browser-warning');
   res.setHeader('Access-Control-Allow-Private-Network', 'true');
 
   if (req.method === 'OPTIONS') {
@@ -176,7 +196,8 @@ const server = http.createServer(async (req, res) => {
     res.end(JSON.stringify({
       ip: lanIp,
       port: PORT,
-      baseUrl: `http://${lanIp}:${PORT}`
+      baseUrl: LINK_NGROK || `http://${lanIp}:${PORT}`,
+      ngrokUrl: LINK_NGROK
     }));
     return;
   }
@@ -388,7 +409,7 @@ const server = http.createServer(async (req, res) => {
   }));
 });
 
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, '0.0.0.0', async () => {
   const lanIp = getLanIp();
   console.log('================================================================');
   console.log('   CON ĐƯỜNG ĐỘC LẬP (1930 - 1945) - MÁY CHỦ XỬ LÝ TỐC ĐỘ CAO  ');
@@ -396,9 +417,26 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`[ONLINE] Máy chủ đang chạy tại Cổng: ${PORT}`);
   console.log(`- Tại máy Host:  http://localhost:${PORT}`);
   console.log(`- Mạng LAN/WiFi: http://${lanIp}:${PORT}`);
+  console.log(`- Link Ngrok BE: ${LINK_NGROK}`);
   console.log('----------------------------------------------------------------');
+
+  if (KEY_NGROK) {
+    try {
+      const ngrok = await import('@ngrok/ngrok');
+      const domainHost = LINK_NGROK.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+      const listener = await ngrok.default.forward({
+        addr: PORT,
+        authtoken: KEY_NGROK,
+        domain: domainHost
+      });
+      console.log(`[NGROK ONLINE] Đã kết nối thành công tới: ${listener.url()}`);
+    } catch (err) {
+      console.log(`[NGROK INFO] ${err?.message || 'Tunnel Ngrok đang mở hoặc được quản lý ở tiến trình khác.'}`);
+    }
+  }
+
   console.log('✦ Đã tối ưu hóa bộ đệm RAM chịu tải 60 người chơi cùng lúc.');
   console.log('✦ Giao diện https://conduongdoclap.vercel.app kết nối trực tiếp');
-  console.log('  về máy chủ này để xử lý logic phòng đua mượt mà nhất.');
+  console.log(`  về ${LINK_NGROK} để xử lý logic phòng đua mượt mà nhất.`);
   console.log('================================================================\n');
 });

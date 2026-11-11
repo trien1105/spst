@@ -130,7 +130,7 @@ export function raceRoomPlugin() {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Bypass-Tunnel-Reminder');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Bypass-Tunnel-Reminder, ngrok-skip-browser-warning');
         res.setHeader('Access-Control-Allow-Private-Network', 'true');
 
         if (req.method === 'OPTIONS') {
