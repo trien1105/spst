@@ -2319,6 +2319,14 @@ export default function App() {
   const [hostRoomCode, setHostRoomCode] = useState('DOCLAP');
   const [showServerConfig, setShowServerConfig] = useState(false);
   const [joinCodeInput, setJoinCodeInput] = useState('');
+  // Trạng thái phòng của người chơi ('WAITING' = ở màn hình Sảnh Chờ đổi tên & xem người chơi khác, 'RACING' = đang trong game)
+  const [playerRoomStatus, setPlayerRoomStatus] = useState(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('room')) return 'WAITING';
+    } catch {}
+    return initialSaved?.playerRoomStatus === 'RACING' && initialSaved?.syncedStartTime ? 'RACING' : 'WAITING';
+  });
 
   // Hàm xử lý khi người chơi nhập mã code trên thanh Navbar và bấm "Vào Phòng"
   const handlePlayerJoinByCode = (e) => {
@@ -2327,6 +2335,7 @@ export default function App() {
     if (!cleanCode) return;
     SoundEngine.interact();
     setRoomCode(cleanCode);
+    setPlayerRoomStatus('WAITING');
     setJoinCodeInput('');
   };
 
@@ -2334,6 +2343,7 @@ export default function App() {
   const handleLeaveRoom = () => {
     SoundEngine.interact();
     setRoomCode('');
+    setPlayerRoomStatus('WAITING');
     setRaceRoomData(null);
     syncedStartTimeRef.current = null;
   };
@@ -2358,6 +2368,19 @@ export default function App() {
   // Lưu dấu mốc startTime của ván đua hiện tại để phân biệt reconnect cùng ván vs Admin bấm Bắt Đầu ván mới
   const syncedStartTimeRef = useRef(initialSaved?.syncedStartTime || null);
   const playSessionStartRef = useRef(Date.now());
+
+  // Kiểm tra người chơi có đang ở trong Sảnh Chờ Phòng Thi (đã nhập code phòng nhưng Host chưa bấm Bắt đầu) hay không
+  const isInPlayerWaitingLobby = Boolean(
+    roomCode &&
+    roomCode.trim() &&
+    !showHostModal &&
+    !isAdminAuthenticated &&
+    playerRoomStatus !== 'RACING'
+  );
+  const isInPlayerWaitingLobbyRef = useRef(isInPlayerWaitingLobby);
+  useEffect(() => {
+    isInPlayerWaitingLobbyRef.current = isInPlayerWaitingLobby;
+  }, [isInPlayerWaitingLobby]);
 
   // Hàm ép toàn bộ tiến trình người chơi quay về điểm xuất phát (khi Admin bấm Bắt Đầu hoặc Đặt Lại)
   const resetPlayerForNewRaceSession = useCallback((newStartTime) => {
@@ -2416,6 +2439,7 @@ export default function App() {
     try {
       const progressData = {
         roomCode,
+        playerRoomStatus,
         syncedStartTime: syncedStartTimeRef.current,
         currentMapId,
         playerPos: posRef.current,
@@ -2432,6 +2456,7 @@ export default function App() {
     } catch {}
   }, [
     roomCode,
+    playerRoomStatus,
     currentMapId,
     solvedIds,
     collectedItems,
@@ -2921,6 +2946,15 @@ export default function App() {
     resetPlayerForNewRaceSession
   ]);
 
+  // Khi người chơi đang ở Sảnh chờ và gõ đổi tên: tự động đồng bộ ngay tên mới lên Server sau 350ms
+  useEffect(() => {
+    if (!isInPlayerWaitingLobby) return;
+    const t = setTimeout(() => {
+      setRetryTrigger((v) => v + 1);
+    }, 350);
+    return () => clearTimeout(t);
+  }, [playerName, isInPlayerWaitingLobby]);
+
   // Kiểm tra trạng thái thực tế của VPS Backend 180.93.126.40:4000 qua /health
   useEffect(() => {
     let isCancelled = false;
@@ -3017,6 +3051,7 @@ export default function App() {
             }
 
             if (data.roomStatus === 'RACING' && data.startTime) {
+              setPlayerRoomStatus((prev) => (prev !== 'RACING' ? 'RACING' : prev));
               const diffSec = Math.floor((Date.now() - data.startTime) / 1000);
               setRaceElapsedSeconds(Math.max(0, diffSec));
 
@@ -3030,7 +3065,11 @@ export default function App() {
               }
             } else if (data.roomStatus === 'FINISHED' && data.startTime && data.endTime) {
               setRaceElapsedSeconds(Math.max(0, Math.floor((data.endTime - data.startTime) / 1000)));
+              if (!syncedStartTimeRef.current || syncedStartTimeRef.current !== data.startTime) {
+                setPlayerRoomStatus((prev) => (prev !== 'WAITING' ? 'WAITING' : prev));
+              }
             } else if (data.roomStatus === 'WAITING') {
+              setPlayerRoomStatus((prev) => (prev !== 'WAITING' ? 'WAITING' : prev));
               setRaceElapsedSeconds(0);
               // Nếu trước đó đang trong một ván đua mà Admin bấm Đặt lại (RESET về WAITING) -> Reset người chơi về đầu
               if (syncedStartTimeRef.current !== null) {
@@ -3077,9 +3116,9 @@ export default function App() {
     return () => clearInterval(timer);
   }, [raceRoomData?.status, raceRoomData?.startTime, raceRoomData?.endTime]);
 
-  // Host & Người chơi tải Leaderboard 60 người không chồng chéo (Non-overlapping poll qua POST text/plain)
+  // Host & Người chơi tải Leaderboard / Danh sách người chơi trong phòng (Non-overlapping poll qua POST text/plain)
   useEffect(() => {
-    if (!showHostModal && !showProjectorMode && !showJoinModal) return;
+    if (!showHostModal && !showProjectorMode && !showJoinModal && !isInPlayerWaitingLobby) return;
     let isCancelled = false;
     let timerId = null;
 
@@ -3101,13 +3140,20 @@ export default function App() {
           const data = await res.json();
           if (!isCancelled && data.success && data.room) {
             setRaceRoomData(data.room);
+            if (!showHostModal && !isAdminAuthenticated) {
+              if (data.room.status === 'RACING' && data.room.startTime) {
+                setPlayerRoomStatus((prev) => (prev !== 'RACING' ? 'RACING' : prev));
+              } else if (data.room.status === 'WAITING') {
+                setPlayerRoomStatus((prev) => (prev !== 'WAITING' ? 'WAITING' : prev));
+              }
+            }
           }
         }
       } catch (e) {
       } finally {
         clearTimeout(abortId);
         if (!isCancelled) {
-          timerId = setTimeout(fetchHostRoom, 2000);
+          timerId = setTimeout(fetchHostRoom, 1800);
         }
       }
     };
@@ -3117,7 +3163,7 @@ export default function App() {
       isCancelled = true;
       if (timerId) clearTimeout(timerId);
     };
-  }, [showHostModal, showProjectorMode, showJoinModal, roomCode, hostRoomCode, isAdminAuthenticated, playerId, getApiUrl]);
+  }, [showHostModal, showProjectorMode, showJoinModal, isInPlayerWaitingLobby, roomCode, hostRoomCode, isAdminAuthenticated, playerId, getApiUrl]);
 
   // Host phát lệnh Bắt đầu cuộc đua -> Tự động chuyển màn hình Admin sang Bảng Xếp Hạng Top 1 -> Hết
   const handleHostStartRace = async () => {
@@ -3281,7 +3327,7 @@ export default function App() {
   useEffect(() => {
     const handleKeyDown = (e) => {
       const tag = e.target?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target?.isContentEditable) {
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target?.isContentEditable || isInPlayerWaitingLobbyRef.current) {
         return;
       }
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
@@ -3499,8 +3545,8 @@ export default function App() {
         const imgs = imagesRef.current;
         let anyAgentNear = false;
 
-      // 1. CẬP NHẬT VỊ TRÍ NGƯỜI CHƠI (TỐC ĐỘ THONG THẢ 2.6 TILES/S)
-      if (gameStatus === 'PLAYING' && !activeNpc && !mapTransitionText && !capturedModalRef.current) {
+      // 1. CẬP NHẬT VỊ TRÍ NGƯỜI CHƠI (TỐC ĐỘ THONG THẢ 2.6 TILES/S - TẠM DỪNG KHI ĐANG Ở SẢNH CHỜ PHÒNG THI)
+      if (gameStatus === 'PLAYING' && !activeNpc && !mapTransitionText && !capturedModalRef.current && !isInPlayerWaitingLobbyRef.current) {
         let vx = 0;
         let vy = 0;
 
@@ -5405,6 +5451,183 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* ===================================================================
+          9.5. SẢNH CHỜ DÀNH CHO NGƯỜI CHƠI SAU KHI NHẬP CODE / QUÉT QR PHÒNG THI
+          (ĐỔI TÊN NHÂN VẬT & XEM DANH SÁCH NGƯỜI CHƠI KHÁC TRƯỚC KHI BẮT ĐẦU)
+      =================================================================== */}
+      {isInPlayerWaitingLobby && (() => {
+        const rawList = raceRoomData?.leaderboard || [];
+        // Đảm bảo người chơi hiện tại luôn xuất hiện ngay trong danh sách kèm tên mới nhất đang gõ
+        const myCleanName = (playerName || 'Hò Văn Tèn').trim() || 'Hò Văn Tèn';
+        const hasMe = rawList.some((p) => p.id === playerId);
+        const lobbyPlayers = hasMe
+          ? rawList.map((p) => (p.id === playerId ? { ...p, name: myCleanName, isOnline: true } : p))
+          : [{ id: playerId, name: myCleanName, isOnline: true }, ...rawList];
+
+        return (
+          <div className="fixed inset-0 z-50 bg-[#111315] text-neutral-100 flex flex-col font-sans">
+            {/* Thanh tiêu đề Sảnh chờ người chơi */}
+            <div className="h-14 border-b border-neutral-800 bg-[#16191d] px-4 sm:px-6 flex items-center justify-between shrink-0">
+              <div className="flex items-center space-x-3 sm:space-x-4">
+                <span className="text-sm font-bold tracking-tight text-neutral-100 uppercase">
+                  Sảnh chờ phòng thi
+                </span>
+                <span className="h-4 w-px bg-neutral-700" />
+                <div className="flex items-center space-x-2 text-xs">
+                  <span className="text-neutral-400">Mã phòng:</span>
+                  <span className="font-mono font-bold text-amber-400 bg-neutral-900 border border-neutral-700 px-2.5 py-0.5 rounded">
+                    {roomCode}
+                  </span>
+                </div>
+                <div className="hidden sm:flex items-center space-x-1.5 text-xs">
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      backendConnected === 'ONLINE'
+                        ? 'bg-emerald-500'
+                        : backendConnected === 'CHECKING'
+                        ? 'bg-amber-400'
+                        : 'bg-red-500'
+                    }`}
+                  />
+                  <span className="text-neutral-400">
+                    {backendConnected === 'ONLINE'
+                      ? 'Đã kết nối máy chủ'
+                      : backendConnected === 'CHECKING'
+                      ? 'Đang kết nối...'
+                      : 'Chưa kết nối máy chủ'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={handleLeaveRoom}
+                  className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 text-xs font-medium rounded-md transition"
+                >
+                  Rời phòng / Đổi mã khác
+                </button>
+              </div>
+            </div>
+
+            {/* Nội dung chính Sảnh chờ */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-5xl w-full mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              {/* Cột trái: Đổi tên người chơi & Trạng thái chờ */}
+              <div className="lg:col-span-5 bg-[#16191d] border border-neutral-800 rounded-lg p-6 space-y-6">
+                <div>
+                  <div className="text-xs text-neutral-400 uppercase tracking-wider">
+                    Phòng thi hiện tại
+                  </div>
+                  <div className="mt-2 py-3 px-4 bg-[#111315] border border-neutral-800 rounded-md flex items-center justify-between">
+                    <span className="text-xs text-neutral-400">Mã phòng</span>
+                    <span className="font-mono text-2xl font-bold text-amber-400 tracking-widest">
+                      {roomCode}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Ô đổi tên nhân vật trực tiếp */}
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-200 uppercase tracking-wider mb-2">
+                    Tên hiển thị của bạn
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={playerName}
+                      maxLength={24}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setPlayerName(val);
+                        try {
+                          localStorage.setItem('cddl_player_name', val);
+                        } catch {}
+                      }}
+                      placeholder="Nhập tên của bạn..."
+                      className="w-full bg-[#111315] border border-neutral-700 focus:border-amber-400 rounded-md px-3.5 py-2.5 text-sm font-semibold text-neutral-100 placeholder-neutral-500 focus:outline-none transition"
+                    />
+                  </div>
+                  <p className="text-[11px] text-neutral-400 mt-1.5">
+                    Tên của bạn sẽ tự động cập nhật trên bảng danh sách người chơi và bảng xếp hạng của Quản trị viên.
+                  </p>
+                </div>
+
+                {/* Hộp thông báo trạng thái chờ Host bắt đầu */}
+                <div className="bg-[#111315] border border-neutral-800 rounded-md p-4 space-y-2">
+                  <div className="flex items-center space-x-2.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                    <span className="text-sm font-semibold text-amber-400">
+                      Đang chờ Quản trị viên bắt đầu phần thi...
+                    </span>
+                  </div>
+                  <p className="text-xs text-neutral-400 leading-relaxed">
+                    Hãy kiểm tra lại tên hiển thị của bạn. Ngay khi Quản trị viên bấm <b>Bắt đầu phần thi</b>, màn hình sẽ tự động chuyển vào trò chơi.
+                  </p>
+                </div>
+              </div>
+
+              {/* Cột phải: Danh sách những người chơi khác đang ở trong phòng */}
+              <div className="lg:col-span-7 bg-[#16191d] border border-neutral-800 rounded-lg p-6 flex flex-col min-h-[380px] max-h-[75vh]">
+                <div className="flex items-center justify-between border-b border-neutral-800 pb-4">
+                  <div>
+                    <h3 className="text-base font-semibold text-neutral-100">
+                      Người chơi trong phòng ({lobbyPlayers.length})
+                    </h3>
+                    <p className="text-xs text-neutral-400 mt-0.5">
+                      Danh sách cập nhật trực tiếp những người đã tham gia phòng <b>{roomCode}</b>
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-2xl font-mono font-bold text-amber-400">
+                      {lobbyPlayers.length}
+                    </span>
+                    <span className="text-xs text-neutral-400 block">người chơi</span>
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto mt-4 pr-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {lobbyPlayers.map((p, idx) => {
+                      const isMe = p.id === playerId;
+                      return (
+                        <div
+                          key={p.id}
+                          className={`rounded-md px-3.5 py-2.5 flex items-center justify-between text-xs border transition ${
+                            isMe
+                              ? 'bg-amber-500/10 border-amber-500/50 text-amber-200'
+                              : 'bg-[#111315] border-neutral-800 text-neutral-200'
+                          }`}
+                        >
+                          <div className="flex items-center space-x-2.5 truncate">
+                            <span className="font-mono text-neutral-500 w-6">
+                              #{String(idx + 1).padStart(2, '0')}
+                            </span>
+                            <span className="font-semibold truncate">
+                              {p.name}
+                            </span>
+                            {isMe && (
+                              <span className="text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded shrink-0">
+                                Bạn
+                              </span>
+                            )}
+                          </div>
+                          <span
+                            className={`w-2 h-2 rounded-full shrink-0 ${
+                              p.isOnline !== false ? 'bg-emerald-500' : 'bg-neutral-600'
+                            }`}
+                            title={p.isOnline !== false ? 'Đang trực tuyến' : 'Ngoại tuyến'}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ===================================================================
           10. TRANG QUẢN TRỊ PHÒNG THI (GIAO DIỆN TỐI GIẢN, CHUẨN QUẢN TRỊ, KHÔNG TÍNH ADMIN)
