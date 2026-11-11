@@ -2183,19 +2183,12 @@ export default function App() {
   const [backendConnected, setBackendConnected] = useState('CHECKING');
   const [retryTrigger, setRetryTrigger] = useState(0);
 
-  // 3. Kiểm tra quyền Host (Máy chạy localhost hoặc kết nối trực tiếp vào localhost:4000 trên chính PC này)
+  // 3. Kiểm tra quyền Host: CHỈ DUY NHẤT máy chạy Local (localhost / 127.0.0.1) mới có quyền Điều Hành Host
   const isHostMachine = useMemo(() => {
     if (typeof window === 'undefined') return false;
     const h = window.location.hostname;
-    const isLocalHost = h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || h === '0.0.0.0';
-    const isPointingToLocalEngine = backendUrl.includes('localhost') || backendUrl.includes('127.0.0.1');
-    try {
-      const p = new URLSearchParams(window.location.search);
-      return isLocalHost || isPointingToLocalEngine || p.get('host') === '1';
-    } catch {
-      return isLocalHost || isPointingToLocalEngine;
-    }
-  }, [backendUrl]);
+    return h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || h === '0.0.0.0';
+  }, []);
 
   // 3.2. Tên miền Giao diện Frontend (https://conduongdoclap.vercel.app)
   const [frontendDomain, setFrontendDomain] = useState(() => {
