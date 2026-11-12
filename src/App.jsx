@@ -3063,11 +3063,11 @@ export default function App() {
                 setRaceCountdown('BẮT ĐẦU PHẦN THI!');
                 setTimeout(() => setRaceCountdown(null), 2500);
               }
-            } else if (data.roomStatus === 'FINISHED' && data.startTime && data.endTime) {
-              setRaceElapsedSeconds(Math.max(0, Math.floor((data.endTime - data.startTime) / 1000)));
-              if (!syncedStartTimeRef.current || syncedStartTimeRef.current !== data.startTime) {
-                setPlayerRoomStatus((prev) => (prev !== 'WAITING' ? 'WAITING' : prev));
+            } else if (data.roomStatus === 'FINISHED') {
+              if (data.startTime && data.endTime) {
+                setRaceElapsedSeconds(Math.max(0, Math.floor((data.endTime - data.startTime) / 1000)));
               }
+              setPlayerRoomStatus((prev) => (prev !== 'WAITING' ? 'WAITING' : prev));
             } else if (data.roomStatus === 'WAITING') {
               setPlayerRoomStatus((prev) => (prev !== 'WAITING' ? 'WAITING' : prev));
               setRaceElapsedSeconds(0);
@@ -3143,7 +3143,7 @@ export default function App() {
             if (!showHostModal && !isAdminAuthenticated) {
               if (data.room.status === 'RACING' && data.room.startTime) {
                 setPlayerRoomStatus((prev) => (prev !== 'RACING' ? 'RACING' : prev));
-              } else if (data.room.status === 'WAITING') {
+              } else if (data.room.status === 'WAITING' || data.room.status === 'FINISHED') {
                 setPlayerRoomStatus((prev) => (prev !== 'WAITING' ? 'WAITING' : prev));
               }
             }
@@ -3170,6 +3170,12 @@ export default function App() {
     try {
       SoundEngine.victory();
       setHostTabMode('LIVE_RANKING');
+      setRaceRoomData((prev) => ({
+        ...(prev || { code: hostRoomCode, players: [] }),
+        status: 'RACING',
+        startTime: Date.now(),
+        endTime: null
+      }));
       setRaceCountdown('3... 2... 1... BẮT ĐẦU! 🚀');
       setTimeout(() => setRaceCountdown(null), 3000);
 
@@ -3191,6 +3197,14 @@ export default function App() {
   const handleHostResetRace = async () => {
     try {
       setHostTabMode('LOBBY_QR');
+      setFinishTimeMsRecord(null);
+      setRaceElapsedSeconds(0);
+      setRaceRoomData((prev) => ({
+        ...(prev || { code: hostRoomCode, players: [] }),
+        status: 'WAITING',
+        startTime: null,
+        endTime: null
+      }));
       const res = await fetch(getApiUrl('/api/race/action'), {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
@@ -3199,8 +3213,6 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         if (data.room) setRaceRoomData(data.room);
-        setFinishTimeMsRecord(null);
-        setRaceElapsedSeconds(0);
       }
     } catch (e) {
       console.error('Lỗi reset phòng:', e);
@@ -3211,6 +3223,11 @@ export default function App() {
   const handleHostEndRace = async () => {
     try {
       setHostTabMode('LIVE_RANKING');
+      setRaceRoomData((prev) => ({
+        ...(prev || { code: hostRoomCode, players: [] }),
+        status: 'FINISHED',
+        endTime: Date.now()
+      }));
       const res = await fetch(getApiUrl('/api/race/action'), {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
@@ -5719,6 +5736,14 @@ export default function App() {
 
                 <button
                   type="button"
+                  onClick={handleHostEndRace}
+                  className="px-3 py-1.5 bg-red-700 hover:bg-red-600 border border-red-500 text-white text-xs font-semibold rounded-md transition"
+                >
+                  Kết thúc phòng
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => setShowServerConfig((v) => !v)}
                   className="px-2.5 py-1.5 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-300 text-xs rounded-md transition"
                 >
@@ -5904,8 +5929,15 @@ export default function App() {
                       </button>
                       <button
                         type="button"
+                        onClick={handleHostEndRace}
+                        className="px-4 py-2.5 bg-red-900/80 hover:bg-red-800 border border-red-600 text-red-100 text-xs font-semibold rounded-md transition"
+                      >
+                        Kết thúc phòng
+                      </button>
+                      <button
+                        type="button"
                         onClick={handleHostStartRace}
-                        className="flex-1 py-2.5 bg-red-700 hover:bg-red-600 text-white font-semibold rounded-md text-sm transition"
+                        className="flex-1 py-2.5 bg-emerald-700 hover:bg-emerald-600 text-white font-semibold rounded-md text-sm transition"
                       >
                         Bắt đầu phần thi
                       </button>
@@ -5947,7 +5979,7 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center flex-wrap gap-2">
                       <button
                         type="button"
                         onClick={() => setHostTabMode('LOBBY_QR')}
@@ -5955,29 +5987,26 @@ export default function App() {
                       >
                         Hiện mã QR
                       </button>
-                      {raceRoomData?.status === 'RACING' ? (
-                        <button
-                          type="button"
-                          onClick={handleHostEndRace}
-                          className="px-3 py-1.5 bg-red-800 hover:bg-red-700 text-white text-xs font-medium rounded-md transition"
-                        >
-                          Kết thúc
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={handleHostStartRace}
-                          className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-medium rounded-md transition"
-                        >
-                          Bắt đầu
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={handleHostStartRace}
+                        className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold rounded-md transition"
+                      >
+                        Bắt đầu phần thi
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleHostEndRace}
+                        className="px-3 py-1.5 bg-red-700 hover:bg-red-600 border border-red-500 text-white text-xs font-semibold rounded-md transition"
+                      >
+                        Kết thúc phòng
+                      </button>
                       <button
                         type="button"
                         onClick={handleHostResetRace}
                         className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-300 text-xs rounded-md transition"
                       >
-                        Đặt lại
+                        Đặt lại phòng
                       </button>
                     </div>
                   </div>
